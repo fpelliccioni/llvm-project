@@ -1463,6 +1463,9 @@ enum DeclCode {
   /// \brief A StaticAssertDecl record.
   DECL_STATIC_ASSERT,
 
+  /// A C++ expansion statement.
+  DECL_EXPANSION_STMT,
+
   /// A record containing CXXBaseSpecifiers.
   DECL_CXX_BASE_SPECIFIERS,
 
@@ -1842,6 +1845,12 @@ enum StmtCode {
 
   STMT_CXX_FOR_RANGE,
 
+  /// A CXXExpansionPatternStmt.
+  STMT_CXX_EXPANSION_PATTERN,
+
+  /// A CXXExpansionInstantiationStmt.
+  STMT_CXX_EXPANSION_INSTANTIATION,
+
   /// A CXXOperatorCallExpr record.
   EXPR_CXX_OPERATOR_CALL,
 
@@ -1933,6 +1942,7 @@ enum StmtCode {
   EXPR_CXX_FOLD,                          // CXXFoldExpr
   EXPR_CONCEPT_SPECIALIZATION,            // ConceptSpecializationExpr
   EXPR_REQUIRES,                          // RequiresExpr
+  EXPR_CXX_EXPANSION_SELECT,              // CXXExpansionSelectExpr
 
   // Reflection
   EXPR_REFLECT,
