@@ -492,8 +492,8 @@ private:
   /// Returns true iff the @p Copy instruction must never be eliminated as
   /// redundant. This overload does not consider the operands of @p Copy.
   bool isNeverRedundant(const MachineInstr &Copy) {
-    // FIXME: A future change will implement this.
-    return false;
+    return Copy.getFlag(MachineInstr::FrameSetup) ||
+           Copy.getFlag(MachineInstr::FrameDestroy);
   }
   bool hasImplicitOverlap(const MachineInstr &MI, const MachineOperand &Use);
   bool hasOverlappingMultipleDef(const MachineInstr &MI,
