@@ -53,31 +53,6 @@ class AMDGPUTargetCIRGenInfo : public TargetCIRGenInfo {
 public:
   AMDGPUTargetCIRGenInfo(CIRGenTypes &cgt)
       : TargetCIRGenInfo(std::make_unique<AMDGPUABIInfo>(cgt)) {}
-};
-
-} // namespace
-
-namespace {
-
-class X8664ABIInfo : public ABIInfo {
-public:
-  X8664ABIInfo(CIRGenTypes &cgt) : ABIInfo(cgt) {}
-};
-
-class X8664TargetCIRGenInfo : public TargetCIRGenInfo {
-public:
-  X8664TargetCIRGenInfo(CIRGenTypes &cgt)
-      : TargetCIRGenInfo(std::make_unique<X8664ABIInfo>(cgt)) {}
-};
-class AMDGPUABIInfo : public ABIInfo {
-public:
-  AMDGPUABIInfo(CIRGenTypes &cgt) : ABIInfo(cgt) {}
-};
-
-class AMDGPUTargetCIRGenInfo : public TargetCIRGenInfo {
-public:
-  AMDGPUTargetCIRGenInfo(CIRGenTypes &cgt)
-      : TargetCIRGenInfo(std::make_unique<AMDGPUABIInfo>(cgt)) {}
 
   clang::LangAS
   getGlobalVarAddressSpace(CIRGenModule &cgm,
@@ -111,6 +86,22 @@ public:
         cir::LangAddressSpace::OffloadPrivate);
   }
 };
+
+} // namespace
+
+namespace {
+
+class X8664ABIInfo : public ABIInfo {
+public:
+  X8664ABIInfo(CIRGenTypes &cgt) : ABIInfo(cgt) {}
+};
+
+class X8664TargetCIRGenInfo : public TargetCIRGenInfo {
+public:
+  X8664TargetCIRGenInfo(CIRGenTypes &cgt)
+      : TargetCIRGenInfo(std::make_unique<X8664ABIInfo>(cgt)) {}
+};
+
 } // namespace
 
 namespace {
@@ -135,11 +126,6 @@ clang::CIRGen::createAMDGPUTargetCIRGenInfo(CIRGenTypes &cgt) {
 std::unique_ptr<TargetCIRGenInfo>
 clang::CIRGen::createNVPTXTargetCIRGenInfo(CIRGenTypes &cgt) {
   return std::make_unique<NVPTXTargetCIRGenInfo>(cgt);
-}
-
-std::unique_ptr<TargetCIRGenInfo>
-clang::CIRGen::createAMDGPUTargetCIRGenInfo(CIRGenTypes &cgt) {
-  return std::make_unique<AMDGPUTargetCIRGenInfo>(cgt);
 }
 
 std::unique_ptr<TargetCIRGenInfo>
