@@ -3834,6 +3834,10 @@ public:
 
   StringRef getCUIDHash() const;
 
+  /// Returns whether D is a copy/move constructor or assignment operator
+  /// that can be implemented as a memcpy of the object representation.
+  bool isMemcpyEquivalentSpecialMember(const CXXMethodDecl *D) const;
+
   /// Returns a list of PFP fields for the given type, including subfields in
   /// bases or other fields, except for fields contained within fields of union
   /// type.

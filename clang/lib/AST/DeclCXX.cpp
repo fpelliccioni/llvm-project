@@ -2770,6 +2770,17 @@ bool CXXMethodDecl::isMoveAssignmentOperator() const {
   return Context.hasSameUnqualifiedType(ClassType, ParamType);
 }
 
+bool CXXMethodDecl::isCopyOrMoveConstructor() const {
+  if (const auto *Ctor = dyn_cast<CXXConstructorDecl>(this))
+    return Ctor->isCopyOrMoveConstructor();
+  return false;
+}
+
+bool CXXMethodDecl::isCopyOrMoveConstructorOrAssignment() const {
+  return isCopyOrMoveConstructor() || isCopyAssignmentOperator() ||
+         isMoveAssignmentOperator();
+}
+
 void CXXMethodDecl::addOverriddenMethod(const CXXMethodDecl *MD) {
   assert(MD->isCanonicalDecl() && "Method is not canonical!");
   assert(MD->isVirtual() && "Method is not virtual!");

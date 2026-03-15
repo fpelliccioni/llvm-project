@@ -15480,6 +15480,28 @@ bool ASTContext::arePFPFieldsTriviallyCopyable(const RecordDecl *RD) const {
   return true;
 }
 
+bool ASTContext::isMemcpyEquivalentSpecialMember(const CXXMethodDecl *D) const {
+  if (!D->isCopyOrMoveConstructorOrAssignment())
+    return false;
+
+  // Non-trivially-copyable fields with pointer field protection need to be
+  // copied one by one.
+  const CXXRecordDecl *Parent = D->getParent();
+  if (!arePFPFieldsTriviallyCopyable(Parent) &&
+      hasPFPFields(getCanonicalTagType(Parent)))
+    return false;
+
+  // We can emit a memcpy for a trivial copy or move constructor/assignment.
+  if (D->isTrivial() && !D->getParent()->mayInsertExtraPadding())
+    return true;
+
+  // We *must* emit a memcpy for a defaulted union copy or move op.
+  if (D->getParent()->isUnion() && D->isDefaulted())
+    return true;
+
+  return false;
+}
+
 static void findPFPFields(const ASTContext &Ctx, QualType Ty, CharUnits Offset,
                           std::vector<PFPField> &Fields, bool IncludeVBases) {
   if (auto *AT = Ctx.getAsConstantArrayType(Ty)) {

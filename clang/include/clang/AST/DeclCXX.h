@@ -2229,6 +2229,15 @@ public:
   /// Determine whether this is a move assignment operator.
   bool isMoveAssignmentOperator() const;
 
+  /// Determine whether this is a copy or move constructor or a copy or move
+  /// assignment operator.
+  bool isCopyOrMoveConstructorOrAssignment() const;
+
+  /// Determine whether this is a copy or move constructor. Always returns
+  /// false for non-constructor methods; see also
+  /// CXXConstructorDecl::isCopyOrMoveConstructor().
+  bool isCopyOrMoveConstructor() const;
+
   CXXMethodDecl *getCanonicalDecl() override {
     return cast<CXXMethodDecl>(FunctionDecl::getCanonicalDecl());
   }
