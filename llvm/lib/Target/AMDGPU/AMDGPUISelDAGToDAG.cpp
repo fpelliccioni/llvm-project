@@ -2056,6 +2056,116 @@ bool AMDGPUDAGToDAGISel::SelectGlobalSAddr(SDNode *N, SDValue Addr,
       }
     }
 
+    // Try to fold a nested add: add(add(sgpr, v1), v2)
+    //   -> base = sgpr, voffset = lo32(v1) + lo32(v2)
+    // Instead of requiring v1/v2 to be explicit ext(i32), use KnownBits
+    // on the original i64 operands to prove they fit in i32 and their
+    // i32 sum does not overflow.
+    if (!SAddr) {
+      bool IsSigned = Subtarget->hasSignedGVSOffset();
+
+      auto getI32 = [&](SDValue V, const SDLoc &SL) -> SDValue {
+        if (SDValue Ext = matchExtFromI32orI32(V, IsSigned, CurDAG))
+          return Ext;
+        if (V.getValueType() == MVT::i32)
+          return V;
+        if (auto *C = dyn_cast<ConstantSDNode>(V))
+          return getMaterializedScalarImm32(Lo_32(C->getZExtValue()), SL);
+        return SDValue(
+            CurDAG->getMachineNode(
+                TargetOpcode::EXTRACT_SUBREG, SL, MVT::i32, V,
+                CurDAG->getTargetConstant(AMDGPU::sub0, SL, MVT::i32)),
+            0);
+      };
+
+      for (unsigned I = 0; I < 2 && !SAddr; ++I) {
+        SDValue V2 = Addr.getOperand(I);
+        SDValue InnerAddr = Addr.getOperand(1 - I);
+
+        if (!InnerAddr->isAnyAdd())
+          continue;
+
+        for (unsigned J = 0; J < 2; ++J) {
+          SDValue MaybeBase = InnerAddr.getOperand(J);
+          SDValue V1 = InnerAddr.getOperand(1 - J);
+
+          if (MaybeBase->isDivergent())
+            continue;
+
+          KnownBits KnownV1 = CurDAG->computeKnownBits(V1);
+
+          // For a constant V2, optionally split into ImmOffset + remainder.
+          int64_t SplitImmOffset = 0;
+          KnownBits KnownV2(64);
+          auto *CV2 = dyn_cast<ConstantSDNode>(V2);
+          int64_t VOffsetConst = 0;
+          if (CV2) {
+            VOffsetConst = CV2->getSExtValue();
+            if (NeedIOffset && VOffsetConst > 0) {
+              const SIInstrInfo *TII = Subtarget->getInstrInfo();
+              std::tie(SplitImmOffset, VOffsetConst) =
+                  TII->splitFlatOffset(VOffsetConst, AMDGPUAS::GLOBAL_ADDRESS,
+                                       SIInstrFlags::FlatGlobal);
+            }
+            KnownV2 = KnownBits::makeConstant(
+                APInt(64, VOffsetConst, /*isSigned=*/true));
+          } else {
+            KnownV2 = CurDAG->computeKnownBits(V2);
+          }
+
+          // Combined check: v1 + v2 fits in i32 (which also implies each
+          // individually fits in i32).
+          bool Fits = false;
+          if (IsSigned) {
+            bool MaxOF = true, MinOF = true;
+            APInt MaxSum = KnownV1.getSignedMaxValue().sadd_ov(
+                KnownV2.getSignedMaxValue(), MaxOF);
+            APInt MinSum = KnownV1.getSignedMinValue().sadd_ov(
+                KnownV2.getSignedMinValue(), MinOF);
+            Fits = !MaxOF && !MinOF && MaxSum.sle(APInt(64, INT32_MAX)) &&
+                   MinSum.sge(APInt(64, static_cast<int64_t>(INT32_MIN), true));
+          } else {
+            bool OF = true;
+            APInt MaxSum =
+                KnownV1.getMaxValue().uadd_ov(KnownV2.getMaxValue(), OF);
+            Fits = !OF && MaxSum.ule(APInt(64, UINT32_MAX));
+          }
+
+          if (!Fits)
+            continue;
+
+          SDLoc SL(N);
+          SAddr = MaybeBase;
+
+          SDValue I32V1 = getI32(V1, SL);
+          if (CV2 && VOffsetConst == 0) {
+            VOffset = I32V1;
+          } else {
+            SDValue I32V2 =
+                CV2 ? getMaterializedScalarImm32(Lo_32(VOffsetConst), SL)
+                    : getI32(V2, SL);
+            if (Subtarget->hasAddNoCarryInsts()) {
+              SDValue Clamp = CurDAG->getTargetConstant(0, SL, MVT::i1);
+              VOffset = SDValue(CurDAG->getMachineNode(AMDGPU::V_ADD_U32_e64,
+                                                       SL, MVT::i32,
+                                                       {I32V1, I32V2, Clamp}),
+                                0);
+            } else {
+              SDVTList VTs = CurDAG->getVTList(MVT::i32, MVT::i1);
+              SDValue Clamp = CurDAG->getTargetConstant(0, SL, MVT::i1);
+              VOffset =
+                  SDValue(CurDAG->getMachineNode(AMDGPU::V_ADD_CO_U32_e64, SL,
+                                                 VTs, {I32V1, I32V2, Clamp}),
+                          0);
+            }
+          }
+
+          ImmOffset = SplitImmOffset;
+          break;
+        }
+      }
+    }
+
     if (SAddr) {
       Offset = CurDAG->getSignedTargetConstant(ImmOffset, SDLoc(), MVT::i32);
       return true;

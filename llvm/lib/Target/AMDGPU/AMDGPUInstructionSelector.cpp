@@ -5978,6 +5978,138 @@ AMDGPUInstructionSelector::selectGlobalSAddr(MachineOperand &Root,
                  }}};
       }
     }
+
+    // Try to fold a nested add: G_PTR_ADD(G_PTR_ADD(sgpr, v1), v2)
+    //   -> base = sgpr, voffset = lo32(v1) + lo32(v2)
+    // Instead of requiring v1/v2 to be explicit ext(s32), use KnownBits
+    // on the original s64 operands to prove they fit in i32 and their
+    // i32 sum does not overflow.
+    {
+      bool IsSigned = Subtarget->hasSignedGVSOffset();
+      Register OuterOffset = AddrDef->MI->getOperand(2).getReg();
+      Register InnerPtrAdd =
+          getSrcRegIgnoringCopies(AddrDef->MI->getOperand(1).getReg(), *MRI);
+      auto InnerDef = getDefSrcRegIgnoringCopies(InnerPtrAdd, *MRI);
+
+      if (InnerDef && InnerDef->MI->getOpcode() == AMDGPU::G_PTR_ADD) {
+        Register MaybeBase =
+            getSrcRegIgnoringCopies(InnerDef->MI->getOperand(1).getReg(), *MRI);
+        Register InnerOffset = InnerDef->MI->getOperand(2).getReg();
+
+        if (isSGPR(MaybeBase)) {
+          KnownBits KnownV1 = VT->getKnownBits(InnerOffset);
+
+          // For a constant outer offset, optionally split into
+          // ImmOffset + remainder.
+          int64_t SplitImmOffset = 0;
+          KnownBits KnownV2(64);
+          auto OuterConst =
+              getIConstantVRegValWithLookThrough(OuterOffset, *MRI);
+          int64_t VOffsetConst = 0;
+          bool IsConst = false;
+          if (OuterConst) {
+            VOffsetConst = OuterConst->Value.getSExtValue();
+            if (NeedIOffset && VOffsetConst > 0) {
+              std::tie(SplitImmOffset, VOffsetConst) =
+                  TII.splitFlatOffset(VOffsetConst, AMDGPUAS::GLOBAL_ADDRESS,
+                                      SIInstrFlags::FlatGlobal);
+            }
+            KnownV2 = KnownBits::makeConstant(
+                APInt(64, VOffsetConst, /*isSigned=*/true));
+            IsConst = true;
+          } else {
+            KnownV2 = VT->getKnownBits(OuterOffset);
+          }
+
+          // Combined check: v1 + v2 fits in i32 (which also implies each
+          // individually fits in i32).
+          bool Fits = false;
+          if (IsSigned) {
+            bool MaxOF = true, MinOF = true;
+            APInt MaxSum = KnownV1.getSignedMaxValue().sadd_ov(
+                KnownV2.getSignedMaxValue(), MaxOF);
+            APInt MinSum = KnownV1.getSignedMinValue().sadd_ov(
+                KnownV2.getSignedMinValue(), MinOF);
+            Fits = !MaxOF && !MinOF && MaxSum.sle(APInt(64, INT32_MAX)) &&
+                   MinSum.sge(APInt(64, static_cast<int64_t>(INT32_MIN), true));
+          } else {
+            bool OF = true;
+            APInt MaxSum =
+                KnownV1.getMaxValue().uadd_ov(KnownV2.getMaxValue(), OF);
+            Fits = !OF && MaxSum.ule(APInt(64, UINT32_MAX));
+          }
+
+          if (Fits) {
+            MachineInstr *MI = Root.getParent();
+            MachineBasicBlock *MBB = MI->getParent();
+            const DebugLoc &DL = MI->getDebugLoc();
+
+            auto getI32 = [&](Register Reg) -> Register {
+              if (Register Ext = matchExtendFromS32OrS32(Reg, IsSigned))
+                return Ext;
+              if (MRI->getType(Reg) == LLT::scalar(32))
+                return Reg;
+              const RegisterBank *RB = RBI.getRegBank(Reg, *MRI, TRI);
+              const TargetRegisterClass *RC64 =
+                  TRI.getRegClassForSizeOnBank(64, *RB);
+              const TargetRegisterClass *RC32 =
+                  TRI.getRegClassForSizeOnBank(32, *RB);
+              RBI.constrainGenericRegister(Reg, *RC64, *MRI);
+              Register Lo32 = MRI->createVirtualRegister(RC32);
+              BuildMI(*MBB, MI, DL, TII.get(TargetOpcode::COPY), Lo32)
+                  .addReg(Reg, {}, AMDGPU::sub0);
+              return Lo32;
+            };
+
+            Register I32V1 = getI32(InnerOffset);
+            Register VOffsetReg;
+            if (IsConst && VOffsetConst == 0) {
+              VOffsetReg = I32V1;
+            } else {
+              Register I32V2;
+              if (IsConst) {
+                I32V2 = MRI->createVirtualRegister(&AMDGPU::VGPR_32RegClass);
+                BuildMI(*MBB, MI, DL, TII.get(AMDGPU::V_MOV_B32_e32), I32V2)
+                    .addImm(Lo_32(VOffsetConst));
+              } else {
+                I32V2 = getI32(OuterOffset);
+              }
+
+              VOffsetReg = MRI->createVirtualRegister(&AMDGPU::VGPR_32RegClass);
+              if (STI.hasAddNoCarryInsts()) {
+                BuildMI(*MBB, MI, DL, TII.get(AMDGPU::V_ADD_U32_e64),
+                        VOffsetReg)
+                    .addReg(I32V1)
+                    .addReg(I32V2)
+                    .addImm(0);
+              } else {
+                Register UnusedCarry =
+                    MRI->createVirtualRegister(TRI.getWaveMaskRegClass());
+                BuildMI(*MBB, MI, DL, TII.get(AMDGPU::V_ADD_CO_U32_e64),
+                        VOffsetReg)
+                    .addDef(UnusedCarry, RegState::Dead)
+                    .addReg(I32V1)
+                    .addReg(I32V2)
+                    .addImm(0);
+              }
+            }
+
+            if (NeedIOffset)
+              return {{
+                  [=](MachineInstrBuilder &MIB) { MIB.addReg(MaybeBase); },
+                  [=](MachineInstrBuilder &MIB) { MIB.addReg(VOffsetReg); },
+                  [=](MachineInstrBuilder &MIB) { MIB.addImm(SplitImmOffset); },
+                  [=](MachineInstrBuilder &MIB) { MIB.addImm(CPolBits); },
+              }};
+            return {{
+                [=](MachineInstrBuilder &MIB) { MIB.addReg(MaybeBase); },
+                [=](MachineInstrBuilder &MIB) { MIB.addReg(VOffsetReg); },
+                [=](MachineInstrBuilder &MIB) { MIB.addImm(CPolBits); },
+            }};
+          }
+        }
+      }
+    }
   }
 
   // FIXME: We should probably have folded COPY (G_IMPLICIT_DEF) earlier, and
