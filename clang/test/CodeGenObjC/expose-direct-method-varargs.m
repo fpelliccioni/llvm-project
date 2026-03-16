@@ -1,8 +1,5 @@
-<<<<<<< Updated upstream
 // Test variadic direct methods - use inline preconditions instead of thunks
 // to avoid musttail complexity across different architectures.
-=======
->>>>>>> Stashed changes
 // RUN: %clang_cc1 -emit-llvm -fobjc-arc -triple arm64-apple-darwin10 \
 // RUN:   -fobjc-direct-precondition-thunk %s -o - | FileCheck %s
 

@@ -2154,19 +2154,19 @@ CodeGen::RValue CGObjCCommonMac::EmitMessageSend(
     RequiresNullCheck = true;
 
   if (CGM.shouldHavePreconditionInline(Method)) {
-    // For variadic class methods, we need to inline pre condition checks. That
+    // For variadic class methods, we need to inline precondition checks. That
     // include two things:
-    // 1. if this is a class method, we have to realize the class if we are not
-    // sure.
+    // 1. We have to inline the class realization if we are not sure if it must
+    // have been realized.
     if (ClassReceiver && ClassObjectCanBeUnrealized) {
       // Perform class realization using the helper function
       Arg0 = GenerateClassRealization(CGF, Arg0, ClassReceiver);
       ActualArgs[0] = CallArg(RValue::get(Arg0), ActualArgs[0].Ty);
     }
-    // 2. inline the nil check if we are not sure if the receiver can be null.
-    // Luckly, `NullReturnState` already does that for corner cases like
-    // ns_consume, we only need to override the flag, even if return value is
-    // unused.
+    // 2. We have to inline the precondition thunk if we are not sure if the
+    // receiver can be null. Luckly, `NullReturnState` already does that for
+    // corner cases like ns_consume, so we only need to override the flag,
+    // regardless if the return value is unused.
     RequiresNullCheck |= ReceiverCanBeNull;
   }
 
@@ -3994,13 +3994,9 @@ CGObjCCommonMac::GenerateDirectMethod(const ObjCMethodDecl *OMD,
   return DirectMethodDefinitions.insert({COMD, Info}).first->second;
 }
 
-/// Start an Objective-C direct method thunk.
-///
-/// The thunk must use musttail to remain transparent to ARC - any
-/// ARC autorelease operations must happen in the caller, not in the thunk.
-void CodeGenFunction::StartObjCDirectThunk(const ObjCMethodDecl *OMD,
-                                           llvm::Function *Fn,
-                                           const CGFunctionInfo &FI) {
+/// Start an Objective-C direct method precondition thunk.
+void CodeGenFunction::StartObjCDirectPreconditionThunk(
+    const ObjCMethodDecl *OMD, llvm::Function *Fn, const CGFunctionInfo &FI) {
   // Mark this as a thunk function to disable ARC parameter processing
   // and other thunk-inappropriate behavior.
   CurFuncIsThunk = true;
@@ -4029,8 +4025,8 @@ void CodeGenFunction::StartObjCDirectThunk(const ObjCMethodDecl *OMD,
   CurFuncDecl = OMD;
 }
 
-/// Finish an Objective-C direct method thunk.
-void CodeGenFunction::FinishObjCDirectThunk() {
+/// Finish an Objective-C direct method precondition thunk.
+void CodeGenFunction::FinishObjCDirectPreconditionThunk() {
   // Create a dummy block to return the value of the thunk.
   //
   // The non-nil branch alredy returned because of musttail.
@@ -4084,7 +4080,7 @@ CGObjCCommonMac::GenerateObjCDirectThunk(const ObjCMethodDecl *OMD,
 
   // Create a CodeGenFunction to generate the thunk body
   CodeGenFunction CGF(CGM);
-  CGF.StartObjCDirectThunk(OMD, Thunk, FI);
+  CGF.StartObjCDirectPreconditionThunk(OMD, Thunk, FI);
 
   // Set function attributes from CGFunctionInfo to ensure the thunk has
   // matching parameter attributes (especially sret) for musttail correctness.
@@ -4129,7 +4125,7 @@ CGObjCCommonMac::GenerateObjCDirectThunk(const ObjCMethodDecl *OMD,
     CGF.Builder.CreateRet(Call);
 
   // Finish the ObjC direct thunk (creates dummy block and calls FinishFunction)
-  CGF.FinishObjCDirectThunk();
+  CGF.FinishObjCDirectPreconditionThunk();
   return Thunk;
 }
 
@@ -4137,7 +4133,9 @@ llvm::Function *CGObjCCommonMac::GetDirectMethodCallee(
     const ObjCMethodDecl *OMD, const ObjCContainerDecl *CD,
     bool ReceiverCanBeNull, bool ClassObjectCanBeUnrealized) {
 
-  // Get from cache or populate the function declaration lazily
+  // Get from cache or populate the function declaration.
+  // Info will also maintain the corresponding thunk function to make sure the
+  // info is valid.
   DirectMethodInfo &Info = GenerateDirectMethod(OMD, CD);
 
   // If thunk optimization not enabled (or variadic method which can't use

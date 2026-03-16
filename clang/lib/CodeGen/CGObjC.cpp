@@ -765,11 +765,12 @@ void CodeGenFunction::StartObjCMethod(const ObjCMethodDecl *OMD,
     Fn->setVisibility(llvm::Function::HiddenVisibility);
     if (CGM.isPreconditionThunkOptEnabled()) {
       // However, if we expose the symbol, and the decl (property or method)
-      // have visibility attribute set
+      // have visibility attribute set ...
       const NamedDecl *Decl = OMD;
-      if (const auto *PD = OMD->findPropertyDecl())
+      if (const auto *PD = OMD->findPropertyDecl()) {
         Decl = PD;
-      // then respect source level visibility setting
+      }
+      // ... then respect source level visibility setting
       if (auto V = Decl->getExplicitVisibility(NamedDecl::VisibilityForValue)) {
         Fn->setVisibility(CGM.GetLLVMVisibility(*V));
       }
