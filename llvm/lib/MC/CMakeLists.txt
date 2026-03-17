@@ -13,7 +13,6 @@ add_llvm_component_library(LLVMMC
   MCAsmInfoWasm.cpp
   MCAsmInfoXCOFF.cpp
   MCAsmMacro.cpp
-  MCAsmStreamer.cpp
   MCAssembler.cpp
   MCCodeEmitter.cpp
   MCCodeView.cpp
@@ -25,6 +24,7 @@ add_llvm_component_library(LLVMMC
   MCELFStreamer.cpp
   MCExpr.cpp
   MCFragment.cpp
+  MCGNUAsmStreamer.cpp
   MCGOFFStreamer.cpp
   MCInst.cpp
   MCInstPrinter.cpp

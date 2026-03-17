@@ -1,4 +1,4 @@
-//===- lib/MC/MCAsmStreamer.cpp - Text Assembly Output ----------*- C++ -*-===//
+//===- lib/MC/MCGNUAsmStreamer.cpp - Text Assembly Output -------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -12,6 +12,7 @@
 #include "llvm/DebugInfo/CodeView/SymbolRecord.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCAsmStreamer.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCCodeView.h"
@@ -42,7 +43,7 @@ using namespace llvm;
 
 namespace {
 
-class MCAsmStreamer final : public MCStreamer {
+class MCGNUAsmStreamer final : public MCAsmStreamer {
   std::unique_ptr<formatted_raw_ostream> OSOwner;
   formatted_raw_ostream &OS;
   const MCAsmInfo *MAI;
@@ -83,11 +84,11 @@ class MCAsmStreamer final : public MCStreamer {
                                    StringRef FileName, StringRef Comment);
 
 public:
-  MCAsmStreamer(MCContext &Context, std::unique_ptr<formatted_raw_ostream> os,
+  MCGNUAsmStreamer(MCContext &Context, std::unique_ptr<formatted_raw_ostream> os,
                 std::unique_ptr<MCInstPrinter> printer,
                 std::unique_ptr<MCCodeEmitter> emitter,
                 std::unique_ptr<MCAsmBackend> asmbackend)
-      : MCStreamer(Context), OSOwner(std::move(os)), OS(*OSOwner),
+      : MCAsmStreamer(Context), OSOwner(std::move(os)), OS(*OSOwner),
         MAI(Context.getAsmInfo()), InstPrinter(std::move(printer)),
         Assembler(std::make_unique<MCAssembler>(
             Context, std::move(asmbackend), std::move(emitter),
@@ -146,7 +147,7 @@ public:
   bool hasRawTextSupport() const override { return true; }
 
   /// Add a comment that can be emitted to the generated .s file to make the
-  /// output of the compiler more readable. This only affects the MCAsmStreamer
+  /// output of the compiler more readable. This only affects the MCGNUAsmStreamer
   /// and only when verbose assembly output is enabled.
   void AddComment(const Twine &T, bool EOL = true) override;
 
@@ -458,7 +459,7 @@ public:
 
 } // end anonymous namespace.
 
-void MCAsmStreamer::AddComment(const Twine &T, bool EOL) {
+void MCGNUAsmStreamer::AddComment(const Twine &T, bool EOL) {
   if (!IsVerboseAsm) return;
 
   T.toVector(CommentToEmit);
@@ -467,7 +468,7 @@ void MCAsmStreamer::AddComment(const Twine &T, bool EOL) {
     CommentToEmit.push_back('\n'); // Place comment in a new line.
 }
 
-void MCAsmStreamer::EmitCommentsAndEOL() {
+void MCGNUAsmStreamer::EmitCommentsAndEOL() {
   if (CommentToEmit.empty() && CommentStream.GetNumBytesInBuffer() == 0) {
     OS << '\n';
     return;
@@ -494,14 +495,14 @@ static inline int64_t truncateToSize(int64_t Value, unsigned Bytes) {
   return Value & ((uint64_t) (int64_t) -1 >> (64 - Bytes * 8));
 }
 
-void MCAsmStreamer::emitRawComment(const Twine &T, bool TabPrefix) {
+void MCGNUAsmStreamer::emitRawComment(const Twine &T, bool TabPrefix) {
   if (TabPrefix)
     OS << '\t';
   OS << MAI->getCommentString() << T;
   EmitEOL();
 }
 
-void MCAsmStreamer::addExplicitComment(const Twine &T) {
+void MCGNUAsmStreamer::addExplicitComment(const Twine &T) {
   StringRef c = T.getSingleStringRef();
   if (c == MAI->getSeparatorString())
     return;
@@ -538,14 +539,14 @@ void MCAsmStreamer::addExplicitComment(const Twine &T) {
     emitExplicitComments();
 }
 
-void MCAsmStreamer::emitExplicitComments() {
+void MCGNUAsmStreamer::emitExplicitComments() {
   StringRef Comments = ExplicitCommentToEmit;
   if (!Comments.empty())
     OS << Comments;
   ExplicitCommentToEmit.clear();
 }
 
-void MCAsmStreamer::switchSection(MCSection *Section, uint32_t Subsection) {
+void MCGNUAsmStreamer::switchSection(MCSection *Section, uint32_t Subsection) {
   MCSectionSubPair Cur = getCurrentSection();
   if (!EmittedSectionDirective ||
       MCSectionSubPair(Section, Subsection) != Cur) {
@@ -560,7 +561,7 @@ void MCAsmStreamer::switchSection(MCSection *Section, uint32_t Subsection) {
   MCStreamer::switchSection(Section, Subsection);
 }
 
-bool MCAsmStreamer::popSection() {
+bool MCGNUAsmStreamer::popSection() {
   if (!MCStreamer::popSection())
     return false;
   auto [Sec, Subsec] = getCurrentSection();
@@ -568,7 +569,7 @@ bool MCAsmStreamer::popSection() {
   return true;
 }
 
-void MCAsmStreamer::emitELFSymverDirective(const MCSymbol *OriginalSym,
+void MCGNUAsmStreamer::emitELFSymverDirective(const MCSymbol *OriginalSym,
                                            StringRef Name,
                                            bool KeepOriginalSym) {
   OS << ".symver ";
@@ -579,7 +580,7 @@ void MCAsmStreamer::emitELFSymverDirective(const MCSymbol *OriginalSym,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitLabel(MCSymbol *Symbol, SMLoc Loc) {
+void MCGNUAsmStreamer::emitLabel(MCSymbol *Symbol, SMLoc Loc) {
   MCStreamer::emitLabel(Symbol, Loc);
   // FIXME: Fix CodeGen/AArch64/arm64ec-varargs.ll. emitLabel is followed by
   // setVariableValue, leading to an assertion failure if setOffset(0) is
@@ -594,7 +595,7 @@ void MCAsmStreamer::emitLabel(MCSymbol *Symbol, SMLoc Loc) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitLOHDirective(MCLOHType Kind, const MCLOHArgs &Args) {
+void MCGNUAsmStreamer::emitLOHDirective(MCLOHType Kind, const MCLOHArgs &Args) {
   StringRef str = MCLOHIdToName(Kind);
 
 #ifndef NDEBUG
@@ -614,15 +615,15 @@ void MCAsmStreamer::emitLOHDirective(MCLOHType Kind, const MCLOHArgs &Args) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitGNUAttribute(unsigned Tag, unsigned Value) {
+void MCGNUAsmStreamer::emitGNUAttribute(unsigned Tag, unsigned Value) {
   OS << "\t.gnu_attribute " << Tag << ", " << Value << "\n";
 }
 
-void MCAsmStreamer::emitSubsectionsViaSymbols() {
+void MCGNUAsmStreamer::emitSubsectionsViaSymbols() {
   OS << ".subsections_via_symbols\n";
 }
 
-void MCAsmStreamer::emitLinkerOptions(ArrayRef<std::string> Options) {
+void MCGNUAsmStreamer::emitLinkerOptions(ArrayRef<std::string> Options) {
   assert(!Options.empty() && "At least one option is required!");
   OS << "\t.linker_option \"" << Options[0] << '"';
   for (const std::string &Opt : llvm::drop_begin(Options))
@@ -630,7 +631,7 @@ void MCAsmStreamer::emitLinkerOptions(ArrayRef<std::string> Options) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitDataRegion(MCDataRegionType Kind) {
+void MCGNUAsmStreamer::emitDataRegion(MCDataRegionType Kind) {
   if (!MAI->doesSupportDataRegionDirectives())
     return;
   switch (Kind) {
@@ -666,7 +667,7 @@ static void EmitSDKVersionSuffix(raw_ostream &OS,
   }
 }
 
-void MCAsmStreamer::emitVersionMin(MCVersionMinType Type, unsigned Major,
+void MCGNUAsmStreamer::emitVersionMin(MCVersionMinType Type, unsigned Major,
                                    unsigned Minor, unsigned Update,
                                    VersionTuple SDKVersion) {
   OS << '\t' << getVersionMinDirective(Type) << ' ' << Major << ", " << Minor;
@@ -687,7 +688,7 @@ static const char *getPlatformName(MachO::PlatformType Type) {
   llvm_unreachable("Invalid Mach-O platform type");
 }
 
-void MCAsmStreamer::emitBuildVersion(unsigned Platform, unsigned Major,
+void MCGNUAsmStreamer::emitBuildVersion(unsigned Platform, unsigned Major,
                                      unsigned Minor, unsigned Update,
                                      VersionTuple SDKVersion) {
   const char *PlatformName = getPlatformName((MachO::PlatformType)Platform);
@@ -698,13 +699,13 @@ void MCAsmStreamer::emitBuildVersion(unsigned Platform, unsigned Major,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitDarwinTargetVariantBuildVersion(
+void MCGNUAsmStreamer::emitDarwinTargetVariantBuildVersion(
     unsigned Platform, unsigned Major, unsigned Minor, unsigned Update,
     VersionTuple SDKVersion) {
   emitBuildVersion(Platform, Major, Minor, Update, SDKVersion);
 }
 
-void MCAsmStreamer::emitAssignment(MCSymbol *Symbol, const MCExpr *Value) {
+void MCGNUAsmStreamer::emitAssignment(MCSymbol *Symbol, const MCExpr *Value) {
   bool UseSet = MAI->usesSetToEquateSymbol();
   if (UseSet)
     OS << ".set ";
@@ -716,7 +717,7 @@ void MCAsmStreamer::emitAssignment(MCSymbol *Symbol, const MCExpr *Value) {
   MCStreamer::emitAssignment(Symbol, Value);
 }
 
-void MCAsmStreamer::emitConditionalAssignment(MCSymbol *Symbol,
+void MCGNUAsmStreamer::emitConditionalAssignment(MCSymbol *Symbol,
                                               const MCExpr *Value) {
   OS << ".lto_set_conditional ";
   Symbol->print(OS, MAI);
@@ -725,7 +726,7 @@ void MCAsmStreamer::emitConditionalAssignment(MCSymbol *Symbol,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWeakReference(MCSymbol *Alias, const MCSymbol *Symbol) {
+void MCGNUAsmStreamer::emitWeakReference(MCSymbol *Alias, const MCSymbol *Symbol) {
   OS << ".weakref ";
   Alias->print(OS, MAI);
   OS << ", ";
@@ -733,7 +734,7 @@ void MCAsmStreamer::emitWeakReference(MCSymbol *Alias, const MCSymbol *Symbol) {
   EmitEOL();
 }
 
-bool MCAsmStreamer::emitSymbolAttribute(MCSymbol *Symbol,
+bool MCGNUAsmStreamer::emitSymbolAttribute(MCSymbol *Symbol,
                                         MCSymbolAttr Attribute) {
   switch (Attribute) {
   case MCSA_Invalid: llvm_unreachable("Invalid symbol attribute");
@@ -814,61 +815,61 @@ bool MCAsmStreamer::emitSymbolAttribute(MCSymbol *Symbol,
   return true;
 }
 
-void MCAsmStreamer::emitSymbolDesc(MCSymbol *Symbol, unsigned DescValue) {
+void MCGNUAsmStreamer::emitSymbolDesc(MCSymbol *Symbol, unsigned DescValue) {
   OS << ".desc" << ' ';
   Symbol->print(OS, MAI);
   OS << ',' << DescValue;
   EmitEOL();
 }
 
-void MCAsmStreamer::emitSyntaxDirective(StringRef Syntax, StringRef Options) {
+void MCGNUAsmStreamer::emitSyntaxDirective(StringRef Syntax, StringRef Options) {
   OS << "\t." << Syntax << "_syntax";
   if (!Options.empty())
     OS << " " << Options;
   EmitEOL();
 }
 
-void MCAsmStreamer::beginCOFFSymbolDef(const MCSymbol *Symbol) {
+void MCGNUAsmStreamer::beginCOFFSymbolDef(const MCSymbol *Symbol) {
   OS << "\t.def\t";
   Symbol->print(OS, MAI);
   OS << ';';
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCOFFSymbolStorageClass(int StorageClass) {
+void MCGNUAsmStreamer::emitCOFFSymbolStorageClass(int StorageClass) {
   OS << "\t.scl\t" << StorageClass << ';';
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCOFFSymbolType(int Type) {
+void MCGNUAsmStreamer::emitCOFFSymbolType(int Type) {
   OS << "\t.type\t" << Type << ';';
   EmitEOL();
 }
 
-void MCAsmStreamer::endCOFFSymbolDef() {
+void MCGNUAsmStreamer::endCOFFSymbolDef() {
   OS << "\t.endef";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCOFFSafeSEH(MCSymbol const *Symbol) {
+void MCGNUAsmStreamer::emitCOFFSafeSEH(MCSymbol const *Symbol) {
   OS << "\t.safeseh\t";
   Symbol->print(OS, MAI);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCOFFSymbolIndex(MCSymbol const *Symbol) {
+void MCGNUAsmStreamer::emitCOFFSymbolIndex(MCSymbol const *Symbol) {
   OS << "\t.symidx\t";
   Symbol->print(OS, MAI);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCOFFSectionIndex(MCSymbol const *Symbol) {
+void MCGNUAsmStreamer::emitCOFFSectionIndex(MCSymbol const *Symbol) {
   OS << "\t.secidx\t";
   Symbol->print(OS, MAI);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCOFFSecRel32(MCSymbol const *Symbol, uint64_t Offset) {
+void MCGNUAsmStreamer::emitCOFFSecRel32(MCSymbol const *Symbol, uint64_t Offset) {
   OS << "\t.secrel32\t";
   Symbol->print(OS, MAI);
   if (Offset != 0)
@@ -876,7 +877,7 @@ void MCAsmStreamer::emitCOFFSecRel32(MCSymbol const *Symbol, uint64_t Offset) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCOFFImgRel32(MCSymbol const *Symbol, int64_t Offset) {
+void MCGNUAsmStreamer::emitCOFFImgRel32(MCSymbol const *Symbol, int64_t Offset) {
   OS << "\t.rva\t";
   Symbol->print(OS, MAI);
   if (Offset > 0)
@@ -886,13 +887,13 @@ void MCAsmStreamer::emitCOFFImgRel32(MCSymbol const *Symbol, int64_t Offset) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCOFFSecNumber(MCSymbol const *Symbol) {
+void MCGNUAsmStreamer::emitCOFFSecNumber(MCSymbol const *Symbol) {
   OS << "\t.secnum\t";
   Symbol->print(OS, MAI);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCOFFSecOffset(MCSymbol const *Symbol) {
+void MCGNUAsmStreamer::emitCOFFSecOffset(MCSymbol const *Symbol) {
   OS << "\t.secoffset\t";
   Symbol->print(OS, MAI);
   EmitEOL();
@@ -901,7 +902,7 @@ void MCAsmStreamer::emitCOFFSecOffset(MCSymbol const *Symbol) {
 // We need an XCOFF-specific version of this directive as the AIX syntax
 // requires a QualName argument identifying the csect name and storage mapping
 // class to appear before the alignment if we are specifying it.
-void MCAsmStreamer::emitXCOFFLocalCommonSymbol(MCSymbol *LabelSym,
+void MCGNUAsmStreamer::emitXCOFFLocalCommonSymbol(MCSymbol *LabelSym,
                                                uint64_t Size,
                                                MCSymbol *CsectSym,
                                                Align Alignment) {
@@ -923,7 +924,7 @@ void MCAsmStreamer::emitXCOFFLocalCommonSymbol(MCSymbol *LabelSym,
     emitXCOFFRenameDirective(XSym, XSym->getSymbolTableName());
 }
 
-void MCAsmStreamer::emitXCOFFSymbolLinkageWithVisibility(
+void MCGNUAsmStreamer::emitXCOFFSymbolLinkageWithVisibility(
     MCSymbol *Symbol, MCSymbolAttr Linkage, MCSymbolAttr Visibility) {
   auto &Sym = static_cast<MCSymbolXCOFF &>(*Symbol);
   switch (Linkage) {
@@ -969,7 +970,7 @@ void MCAsmStreamer::emitXCOFFSymbolLinkageWithVisibility(
     emitXCOFFRenameDirective(&Sym, Sym.getSymbolTableName());
 }
 
-void MCAsmStreamer::emitXCOFFRenameDirective(const MCSymbol *Name,
+void MCGNUAsmStreamer::emitXCOFFRenameDirective(const MCSymbol *Name,
                                              StringRef Rename) {
   OS << "\t.rename\t";
   Name->print(OS, MAI);
@@ -985,13 +986,13 @@ void MCAsmStreamer::emitXCOFFRenameDirective(const MCSymbol *Name,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitXCOFFRefDirective(const MCSymbol *Symbol) {
+void MCGNUAsmStreamer::emitXCOFFRefDirective(const MCSymbol *Symbol) {
   OS << "\t.ref ";
   Symbol->print(OS, MAI);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitXCOFFExceptDirective(const MCSymbol *Symbol,
+void MCGNUAsmStreamer::emitXCOFFExceptDirective(const MCSymbol *Symbol,
                                              const MCSymbol *Trap,
                                              unsigned Lang,
                                              unsigned Reason,
@@ -1003,7 +1004,7 @@ void MCAsmStreamer::emitXCOFFExceptDirective(const MCSymbol *Symbol,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitXCOFFCInfoSym(StringRef Name, StringRef Metadata) {
+void MCGNUAsmStreamer::emitXCOFFCInfoSym(StringRef Name, StringRef Metadata) {
   const char InfoDirective[] = "\t.info ";
   const char *Separator = ", ";
   constexpr int WordSize = sizeof(uint32_t);
@@ -1067,7 +1068,7 @@ void MCAsmStreamer::emitXCOFFCInfoSym(StringRef Name, StringRef Metadata) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitELFSize(MCSymbol *Symbol, const MCExpr *Value) {
+void MCGNUAsmStreamer::emitELFSize(MCSymbol *Symbol, const MCExpr *Value) {
   assert(MAI->hasDotTypeDotSizeDirective());
   OS << "\t.size\t";
   Symbol->print(OS, MAI);
@@ -1076,7 +1077,7 @@ void MCAsmStreamer::emitELFSize(MCSymbol *Symbol, const MCExpr *Value) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCommonSymbol(MCSymbol *Symbol, uint64_t Size,
+void MCGNUAsmStreamer::emitCommonSymbol(MCSymbol *Symbol, uint64_t Size,
                                      Align ByteAlignment) {
   OS << "\t.comm\t";
   Symbol->print(OS, MAI);
@@ -1097,7 +1098,7 @@ void MCAsmStreamer::emitCommonSymbol(MCSymbol *Symbol, uint64_t Size,
   }
 }
 
-void MCAsmStreamer::emitLocalCommonSymbol(MCSymbol *Symbol, uint64_t Size,
+void MCGNUAsmStreamer::emitLocalCommonSymbol(MCSymbol *Symbol, uint64_t Size,
                                           Align ByteAlign) {
   OS << "\t.lcomm\t";
   Symbol->print(OS, MAI);
@@ -1118,7 +1119,7 @@ void MCAsmStreamer::emitLocalCommonSymbol(MCSymbol *Symbol, uint64_t Size,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitZerofill(MCSection *Section, MCSymbol *Symbol,
+void MCGNUAsmStreamer::emitZerofill(MCSection *Section, MCSymbol *Symbol,
                                  uint64_t Size, Align ByteAlignment,
                                  SMLoc Loc) {
   if (Symbol)
@@ -1146,7 +1147,7 @@ void MCAsmStreamer::emitZerofill(MCSection *Section, MCSymbol *Symbol,
 // .tbss sym, size, align
 // This depends that the symbol has already been mangled from the original,
 // e.g. _a.
-void MCAsmStreamer::emitTBSSSymbol(MCSection *Section, MCSymbol *Symbol,
+void MCGNUAsmStreamer::emitTBSSSymbol(MCSection *Section, MCSymbol *Symbol,
                                    uint64_t Size, Align ByteAlignment) {
   Symbol->setFragment(&Section->getDummyFragment());
 
@@ -1220,7 +1221,7 @@ static void PrintByteList(StringRef Data, raw_ostream &OS,
   llvm_unreachable("Invalid AsmCharLiteralSyntax value!");
 }
 
-void MCAsmStreamer::PrintQuotedString(StringRef Data, raw_ostream &OS) const {
+void MCGNUAsmStreamer::PrintQuotedString(StringRef Data, raw_ostream &OS) const {
   OS << '"';
 
   if (MAI->isAIX()) {
@@ -1271,7 +1272,7 @@ void MCAsmStreamer::PrintQuotedString(StringRef Data, raw_ostream &OS) const {
   OS << '"';
 }
 
-void MCAsmStreamer::emitBytes(StringRef Data) {
+void MCGNUAsmStreamer::emitBytes(StringRef Data) {
   assert(getCurrentSectionOnly() &&
          "Cannot emit contents before setting section!");
   if (Data.empty()) return;
@@ -1328,7 +1329,7 @@ void MCAsmStreamer::emitBytes(StringRef Data) {
   }
 }
 
-void MCAsmStreamer::emitBinaryData(StringRef Data) {
+void MCGNUAsmStreamer::emitBinaryData(StringRef Data) {
   // This is binary data. Print it in a grid of hex bytes for readability.
   const size_t Cols = 4;
   for (size_t I = 0, EI = alignTo(Data.size(), Cols); I < EI; I += Cols) {
@@ -1342,20 +1343,20 @@ void MCAsmStreamer::emitBinaryData(StringRef Data) {
   }
 }
 
-void MCAsmStreamer::emitIntValue(uint64_t Value, unsigned Size) {
+void MCGNUAsmStreamer::emitIntValue(uint64_t Value, unsigned Size) {
   emitValue(MCConstantExpr::create(Value, getContext()), Size);
 }
 
-void MCAsmStreamer::emitIntValueInHex(uint64_t Value, unsigned Size) {
+void MCGNUAsmStreamer::emitIntValueInHex(uint64_t Value, unsigned Size) {
   emitValue(MCConstantExpr::create(Value, getContext(), true), Size);
 }
 
-void MCAsmStreamer::emitIntValueInHexWithPadding(uint64_t Value,
+void MCGNUAsmStreamer::emitIntValueInHexWithPadding(uint64_t Value,
                                                  unsigned Size) {
   emitValue(MCConstantExpr::create(Value, getContext(), true, Size), Size);
 }
 
-void MCAsmStreamer::emitValueImpl(const MCExpr *Value, unsigned Size,
+void MCGNUAsmStreamer::emitValueImpl(const MCExpr *Value, unsigned Size,
                                   SMLoc Loc) {
   assert(Size <= 8 && "Invalid size");
   assert(getCurrentSectionOnly() &&
@@ -1413,7 +1414,7 @@ void MCAsmStreamer::emitValueImpl(const MCExpr *Value, unsigned Size,
   }
 }
 
-void MCAsmStreamer::emitULEB128Value(const MCExpr *Value) {
+void MCGNUAsmStreamer::emitULEB128Value(const MCExpr *Value) {
   int64_t IntValue;
   if (Value->evaluateAsAbsolute(IntValue)) {
     emitULEB128IntValue(IntValue);
@@ -1424,7 +1425,7 @@ void MCAsmStreamer::emitULEB128Value(const MCExpr *Value) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitSLEB128Value(const MCExpr *Value) {
+void MCGNUAsmStreamer::emitSLEB128Value(const MCExpr *Value) {
   int64_t IntValue;
   if (Value->evaluateAsAbsolute(IntValue)) {
     emitSLEB128IntValue(IntValue);
@@ -1435,7 +1436,7 @@ void MCAsmStreamer::emitSLEB128Value(const MCExpr *Value) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitFill(const MCExpr &NumBytes, uint64_t FillValue,
+void MCGNUAsmStreamer::emitFill(const MCExpr &NumBytes, uint64_t FillValue,
                              SMLoc Loc) {
   int64_t IntNumBytes;
   const bool IsAbsolute = NumBytes.evaluateAsAbsolute(IntNumBytes);
@@ -1465,7 +1466,7 @@ void MCAsmStreamer::emitFill(const MCExpr &NumBytes, uint64_t FillValue,
   MCStreamer::emitFill(NumBytes, FillValue);
 }
 
-void MCAsmStreamer::emitFill(const MCExpr &NumValues, int64_t Size,
+void MCGNUAsmStreamer::emitFill(const MCExpr &NumValues, int64_t Size,
                              int64_t Expr, SMLoc Loc) {
   // FIXME: Emit location directives
   OS << "\t.fill\t";
@@ -1475,7 +1476,7 @@ void MCAsmStreamer::emitFill(const MCExpr &NumValues, int64_t Size,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitAlignmentDirective(uint64_t ByteAlignment,
+void MCGNUAsmStreamer::emitAlignmentDirective(uint64_t ByteAlignment,
                                            std::optional<int64_t> Value,
                                            unsigned ValueSize,
                                            unsigned MaxBytesToEmit) {
@@ -1545,13 +1546,13 @@ void MCAsmStreamer::emitAlignmentDirective(uint64_t ByteAlignment,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitValueToAlignment(Align Alignment, int64_t Fill,
+void MCGNUAsmStreamer::emitValueToAlignment(Align Alignment, int64_t Fill,
                                          uint8_t FillLen,
                                          unsigned MaxBytesToEmit) {
   emitAlignmentDirective(Alignment.value(), Fill, FillLen, MaxBytesToEmit);
 }
 
-void MCAsmStreamer::emitCodeAlignment(Align Alignment,
+void MCGNUAsmStreamer::emitCodeAlignment(Align Alignment,
                                       const MCSubtargetInfo *STI,
                                       unsigned MaxBytesToEmit) {
   // Emit with a text fill value.
@@ -1562,12 +1563,12 @@ void MCAsmStreamer::emitCodeAlignment(Align Alignment,
     emitAlignmentDirective(Alignment.value(), std::nullopt, 1, MaxBytesToEmit);
 }
 
-void MCAsmStreamer::emitPrefAlign(Align Alignment) {
+void MCGNUAsmStreamer::emitPrefAlign(Align Alignment) {
   OS << "\t.prefalign\t" << Alignment.value();
   EmitEOL();
 }
 
-void MCAsmStreamer::emitValueToOffset(const MCExpr *Offset,
+void MCGNUAsmStreamer::emitValueToOffset(const MCExpr *Offset,
                                       unsigned char Value,
                                       SMLoc Loc) {
   // FIXME: Verify that Offset is associated with the current section.
@@ -1577,14 +1578,14 @@ void MCAsmStreamer::emitValueToOffset(const MCExpr *Offset,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitFileDirective(StringRef Filename) {
+void MCGNUAsmStreamer::emitFileDirective(StringRef Filename) {
   assert(MAI->hasSingleParameterDotFile());
   OS << "\t.file\t";
   PrintQuotedString(Filename, OS);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitFileDirective(StringRef Filename,
+void MCGNUAsmStreamer::emitFileDirective(StringRef Filename,
                                       StringRef CompilerVersion,
                                       StringRef TimeStamp,
                                       StringRef Description) {
@@ -1611,7 +1612,7 @@ void MCAsmStreamer::emitFileDirective(StringRef Filename,
   EmitEOL();
 }
 
-void MCAsmStreamer::printDwarfFileDirective(
+void MCGNUAsmStreamer::printDwarfFileDirective(
     unsigned FileNo, StringRef Directory, StringRef Filename,
     std::optional<MD5::MD5Result> Checksum, std::optional<StringRef> Source,
     bool UseDwarfDirectory, raw_svector_ostream &OS) const {
@@ -1642,11 +1643,11 @@ void MCAsmStreamer::printDwarfFileDirective(
   }
 }
 
-Expected<unsigned> MCAsmStreamer::tryEmitDwarfFileDirective(
+Expected<unsigned> MCGNUAsmStreamer::tryEmitDwarfFileDirective(
     unsigned FileNo, StringRef Directory, StringRef Filename,
     std::optional<MD5::MD5Result> Checksum, std::optional<StringRef> Source,
     unsigned CUID) {
-  assert(CUID == 0 && "multiple CUs not supported by MCAsmStreamer");
+  assert(CUID == 0 && "multiple CUs not supported by MCGNUAsmStreamer");
 
   MCDwarfLineTable &Table = getContext().getMCDwarfLineTable(CUID);
   unsigned NumFiles = Table.getMCDwarfFiles().size();
@@ -1675,7 +1676,7 @@ Expected<unsigned> MCAsmStreamer::tryEmitDwarfFileDirective(
   return FileNo;
 }
 
-void MCAsmStreamer::emitDwarfFile0Directive(
+void MCGNUAsmStreamer::emitDwarfFile0Directive(
     StringRef Directory, StringRef Filename,
     std::optional<MD5::MD5Result> Checksum, std::optional<StringRef> Source,
     unsigned CUID) {
@@ -1703,7 +1704,7 @@ void MCAsmStreamer::emitDwarfFile0Directive(
 }
 
 /// Helper to emit common .loc directive flags, isa, and discriminator.
-void MCAsmStreamer::emitDwarfLocDirectiveFlags(unsigned Flags, unsigned Isa,
+void MCGNUAsmStreamer::emitDwarfLocDirectiveFlags(unsigned Flags, unsigned Isa,
                                                unsigned Discriminator) {
   if (!MAI->supportsExtendedDwarfLocDirective())
     return;
@@ -1728,7 +1729,7 @@ void MCAsmStreamer::emitDwarfLocDirectiveFlags(unsigned Flags, unsigned Isa,
 }
 
 /// Helper to emit the common suffix of .loc directives.
-void MCAsmStreamer::emitDwarfLocDirectiveSuffix(unsigned FileNo, unsigned Line,
+void MCGNUAsmStreamer::emitDwarfLocDirectiveSuffix(unsigned FileNo, unsigned Line,
                                                 unsigned Column, unsigned Flags,
                                                 unsigned Isa,
                                                 unsigned Discriminator,
@@ -1753,7 +1754,7 @@ void MCAsmStreamer::emitDwarfLocDirectiveSuffix(unsigned FileNo, unsigned Line,
                                     Discriminator, FileName, Comment);
 }
 
-void MCAsmStreamer::emitDwarfLocDirective(unsigned FileNo, unsigned Line,
+void MCGNUAsmStreamer::emitDwarfLocDirective(unsigned FileNo, unsigned Line,
                                           unsigned Column, unsigned Flags,
                                           unsigned Isa, unsigned Discriminator,
                                           StringRef FileName,
@@ -1779,7 +1780,7 @@ void MCAsmStreamer::emitDwarfLocDirective(unsigned FileNo, unsigned Line,
 
 /// This is same as emitDwarfLocDirective, except also emits inlined function
 /// and inlined callsite information.
-void MCAsmStreamer::emitDwarfLocDirectiveWithInlinedAt(
+void MCGNUAsmStreamer::emitDwarfLocDirectiveWithInlinedAt(
     unsigned FileNo, unsigned Line, unsigned Column, unsigned FileIA,
     unsigned LineIA, unsigned ColIA, const MCSymbol *Sym, unsigned Flags,
     unsigned Isa, unsigned Discriminator, StringRef FileName,
@@ -1794,19 +1795,19 @@ void MCAsmStreamer::emitDwarfLocDirectiveWithInlinedAt(
                               FileName, Comment);
 }
 
-void MCAsmStreamer::emitDwarfLocLabelDirective(SMLoc Loc, StringRef Name) {
+void MCGNUAsmStreamer::emitDwarfLocLabelDirective(SMLoc Loc, StringRef Name) {
   MCStreamer::emitDwarfLocLabelDirective(Loc, Name);
   OS << ".loc_label\t" << Name;
   EmitEOL();
 }
 
-MCSymbol *MCAsmStreamer::getDwarfLineTableSymbol(unsigned CUID) {
+MCSymbol *MCGNUAsmStreamer::getDwarfLineTableSymbol(unsigned CUID) {
   // Always use the zeroth line table, since asm syntax only supports one line
   // table for now.
   return MCStreamer::getDwarfLineTableSymbol(0);
 }
 
-bool MCAsmStreamer::emitCVFileDirective(unsigned FileNo, StringRef Filename,
+bool MCGNUAsmStreamer::emitCVFileDirective(unsigned FileNo, StringRef Filename,
                                         ArrayRef<uint8_t> Checksum,
                                         unsigned ChecksumKind) {
   if (!getContext().getCVContext().addFile(*this, FileNo, Filename, Checksum,
@@ -1829,12 +1830,12 @@ bool MCAsmStreamer::emitCVFileDirective(unsigned FileNo, StringRef Filename,
   return true;
 }
 
-bool MCAsmStreamer::emitCVFuncIdDirective(unsigned FuncId) {
+bool MCGNUAsmStreamer::emitCVFuncIdDirective(unsigned FuncId) {
   OS << "\t.cv_func_id " << FuncId << '\n';
   return MCStreamer::emitCVFuncIdDirective(FuncId);
 }
 
-bool MCAsmStreamer::emitCVInlineSiteIdDirective(unsigned FunctionId,
+bool MCGNUAsmStreamer::emitCVInlineSiteIdDirective(unsigned FunctionId,
                                                 unsigned IAFunc,
                                                 unsigned IAFile,
                                                 unsigned IALine, unsigned IACol,
@@ -1845,7 +1846,7 @@ bool MCAsmStreamer::emitCVInlineSiteIdDirective(unsigned FunctionId,
                                                  IALine, IACol, Loc);
 }
 
-void MCAsmStreamer::emitCVLocDirective(unsigned FunctionId, unsigned FileNo,
+void MCGNUAsmStreamer::emitCVLocDirective(unsigned FunctionId, unsigned FileNo,
                                        unsigned Line, unsigned Column,
                                        bool PrologueEnd, bool IsStmt,
                                        StringRef FileName, SMLoc Loc) {
@@ -1869,7 +1870,7 @@ void MCAsmStreamer::emitCVLocDirective(unsigned FunctionId, unsigned FileNo,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCVLinetableDirective(unsigned FunctionId,
+void MCGNUAsmStreamer::emitCVLinetableDirective(unsigned FunctionId,
                                              const MCSymbol *FnStart,
                                              const MCSymbol *FnEnd) {
   OS << "\t.cv_linetable\t" << FunctionId << ", ";
@@ -1880,7 +1881,7 @@ void MCAsmStreamer::emitCVLinetableDirective(unsigned FunctionId,
   this->MCStreamer::emitCVLinetableDirective(FunctionId, FnStart, FnEnd);
 }
 
-void MCAsmStreamer::emitCVInlineLinetableDirective(unsigned PrimaryFunctionId,
+void MCGNUAsmStreamer::emitCVInlineLinetableDirective(unsigned PrimaryFunctionId,
                                                    unsigned SourceFileId,
                                                    unsigned SourceLineNum,
                                                    const MCSymbol *FnStartSym,
@@ -1895,7 +1896,7 @@ void MCAsmStreamer::emitCVInlineLinetableDirective(unsigned PrimaryFunctionId,
       PrimaryFunctionId, SourceFileId, SourceLineNum, FnStartSym, FnEndSym);
 }
 
-void MCAsmStreamer::PrintCVDefRangePrefix(
+void MCGNUAsmStreamer::PrintCVDefRangePrefix(
     ArrayRef<std::pair<const MCSymbol *, const MCSymbol *>> Ranges) {
   OS << "\t.cv_def_range\t";
   for (std::pair<const MCSymbol *, const MCSymbol *> Range : Ranges) {
@@ -1906,7 +1907,7 @@ void MCAsmStreamer::PrintCVDefRangePrefix(
   }
 }
 
-void MCAsmStreamer::emitCVDefRangeDirective(
+void MCGNUAsmStreamer::emitCVDefRangeDirective(
     ArrayRef<std::pair<const MCSymbol *, const MCSymbol *>> Ranges,
     codeview::DefRangeRegisterRelHeader DRHdr) {
   PrintCVDefRangePrefix(Ranges);
@@ -1916,7 +1917,7 @@ void MCAsmStreamer::emitCVDefRangeDirective(
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCVDefRangeDirective(
+void MCGNUAsmStreamer::emitCVDefRangeDirective(
     ArrayRef<std::pair<const MCSymbol *, const MCSymbol *>> Ranges,
     codeview::DefRangeSubfieldRegisterHeader DRHdr) {
   PrintCVDefRangePrefix(Ranges);
@@ -1925,7 +1926,7 @@ void MCAsmStreamer::emitCVDefRangeDirective(
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCVDefRangeDirective(
+void MCGNUAsmStreamer::emitCVDefRangeDirective(
     ArrayRef<std::pair<const MCSymbol *, const MCSymbol *>> Ranges,
     codeview::DefRangeRegisterHeader DRHdr) {
   PrintCVDefRangePrefix(Ranges);
@@ -1934,7 +1935,7 @@ void MCAsmStreamer::emitCVDefRangeDirective(
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCVDefRangeDirective(
+void MCGNUAsmStreamer::emitCVDefRangeDirective(
     ArrayRef<std::pair<const MCSymbol *, const MCSymbol *>> Ranges,
     codeview::DefRangeFramePointerRelHeader DRHdr) {
   PrintCVDefRangePrefix(Ranges);
@@ -1943,35 +1944,35 @@ void MCAsmStreamer::emitCVDefRangeDirective(
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCVStringTableDirective() {
+void MCGNUAsmStreamer::emitCVStringTableDirective() {
   OS << "\t.cv_stringtable";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCVFileChecksumsDirective() {
+void MCGNUAsmStreamer::emitCVFileChecksumsDirective() {
   OS << "\t.cv_filechecksums";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCVFileChecksumOffsetDirective(unsigned FileNo) {
+void MCGNUAsmStreamer::emitCVFileChecksumOffsetDirective(unsigned FileNo) {
   OS << "\t.cv_filechecksumoffset\t" << FileNo;
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCVFPOData(const MCSymbol *ProcSym, SMLoc L) {
+void MCGNUAsmStreamer::emitCVFPOData(const MCSymbol *ProcSym, SMLoc L) {
   OS << "\t.cv_fpo_data\t";
   ProcSym->print(OS, MAI);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitIdent(StringRef IdentString) {
+void MCGNUAsmStreamer::emitIdent(StringRef IdentString) {
   assert(MAI->hasIdentDirective() && ".ident directive not supported");
   OS << "\t.ident\t";
   PrintQuotedString(IdentString, OS);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFISections(bool EH, bool Debug, bool SFrame) {
+void MCGNUAsmStreamer::emitCFISections(bool EH, bool Debug, bool SFrame) {
   MCStreamer::emitCFISections(EH, Debug, SFrame);
   OS << "\t.cfi_sections ";
   bool C = false;
@@ -1994,20 +1995,20 @@ void MCAsmStreamer::emitCFISections(bool EH, bool Debug, bool SFrame) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIStartProcImpl(MCDwarfFrameInfo &Frame) {
+void MCGNUAsmStreamer::emitCFIStartProcImpl(MCDwarfFrameInfo &Frame) {
   OS << "\t.cfi_startproc";
   if (Frame.IsSimple)
     OS << " simple";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIEndProcImpl(MCDwarfFrameInfo &Frame) {
+void MCGNUAsmStreamer::emitCFIEndProcImpl(MCDwarfFrameInfo &Frame) {
   MCStreamer::emitCFIEndProcImpl(Frame);
   OS << "\t.cfi_endproc";
   EmitEOL();
 }
 
-void MCAsmStreamer::EmitRegisterName(int64_t Register) {
+void MCGNUAsmStreamer::EmitRegisterName(int64_t Register) {
   if (!MAI->useDwarfRegNumForCFI()) {
     // User .cfi_* directives can use arbitrary DWARF register numbers, not
     // just ones that map to LLVM register numbers and have known names.
@@ -2022,7 +2023,7 @@ void MCAsmStreamer::EmitRegisterName(int64_t Register) {
   OS << Register;
 }
 
-void MCAsmStreamer::emitCFIDefCfa(int64_t Register, int64_t Offset, SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIDefCfa(int64_t Register, int64_t Offset, SMLoc Loc) {
   MCStreamer::emitCFIDefCfa(Register, Offset, Loc);
   OS << "\t.cfi_def_cfa ";
   EmitRegisterName(Register);
@@ -2030,13 +2031,13 @@ void MCAsmStreamer::emitCFIDefCfa(int64_t Register, int64_t Offset, SMLoc Loc) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIDefCfaOffset(int64_t Offset, SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIDefCfaOffset(int64_t Offset, SMLoc Loc) {
   MCStreamer::emitCFIDefCfaOffset(Offset, Loc);
   OS << "\t.cfi_def_cfa_offset " << Offset;
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFILLVMDefAspaceCfa(int64_t Register, int64_t Offset,
+void MCGNUAsmStreamer::emitCFILLVMDefAspaceCfa(int64_t Register, int64_t Offset,
                                             int64_t AddressSpace, SMLoc Loc) {
   MCStreamer::emitCFILLVMDefAspaceCfa(Register, Offset, AddressSpace, Loc);
   OS << "\t.cfi_llvm_def_aspace_cfa ";
@@ -2056,13 +2057,13 @@ static void PrintCFIEscape(llvm::formatted_raw_ostream &OS, StringRef Values) {
   }
 }
 
-void MCAsmStreamer::emitCFIEscape(StringRef Values, SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIEscape(StringRef Values, SMLoc Loc) {
   MCStreamer::emitCFIEscape(Values, Loc);
   PrintCFIEscape(OS, Values);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIGnuArgsSize(int64_t Size, SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIGnuArgsSize(int64_t Size, SMLoc Loc) {
   MCStreamer::emitCFIGnuArgsSize(Size, Loc);
 
   uint8_t Buffer[16] = { dwarf::DW_CFA_GNU_args_size };
@@ -2072,14 +2073,14 @@ void MCAsmStreamer::emitCFIGnuArgsSize(int64_t Size, SMLoc Loc) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIDefCfaRegister(int64_t Register, SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIDefCfaRegister(int64_t Register, SMLoc Loc) {
   MCStreamer::emitCFIDefCfaRegister(Register, Loc);
   OS << "\t.cfi_def_cfa_register ";
   EmitRegisterName(Register);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIOffset(int64_t Register, int64_t Offset, SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIOffset(int64_t Register, int64_t Offset, SMLoc Loc) {
   MCStreamer::emitCFIOffset(Register, Offset, Loc);
   OS << "\t.cfi_offset ";
   EmitRegisterName(Register);
@@ -2087,7 +2088,7 @@ void MCAsmStreamer::emitCFIOffset(int64_t Register, int64_t Offset, SMLoc Loc) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIPersonality(const MCSymbol *Sym,
+void MCGNUAsmStreamer::emitCFIPersonality(const MCSymbol *Sym,
                                        unsigned Encoding) {
   MCStreamer::emitCFIPersonality(Sym, Encoding);
   OS << "\t.cfi_personality " << Encoding << ", ";
@@ -2095,40 +2096,40 @@ void MCAsmStreamer::emitCFIPersonality(const MCSymbol *Sym,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFILsda(const MCSymbol *Sym, unsigned Encoding) {
+void MCGNUAsmStreamer::emitCFILsda(const MCSymbol *Sym, unsigned Encoding) {
   MCStreamer::emitCFILsda(Sym, Encoding);
   OS << "\t.cfi_lsda " << Encoding << ", ";
   Sym->print(OS, MAI);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIRememberState(SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIRememberState(SMLoc Loc) {
   MCStreamer::emitCFIRememberState(Loc);
   OS << "\t.cfi_remember_state";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIRestoreState(SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIRestoreState(SMLoc Loc) {
   MCStreamer::emitCFIRestoreState(Loc);
   OS << "\t.cfi_restore_state";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIRestore(int64_t Register, SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIRestore(int64_t Register, SMLoc Loc) {
   MCStreamer::emitCFIRestore(Register, Loc);
   OS << "\t.cfi_restore ";
   EmitRegisterName(Register);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFISameValue(int64_t Register, SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFISameValue(int64_t Register, SMLoc Loc) {
   MCStreamer::emitCFISameValue(Register, Loc);
   OS << "\t.cfi_same_value ";
   EmitRegisterName(Register);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIRelOffset(int64_t Register, int64_t Offset,
+void MCGNUAsmStreamer::emitCFIRelOffset(int64_t Register, int64_t Offset,
                                      SMLoc Loc) {
   MCStreamer::emitCFIRelOffset(Register, Offset, Loc);
   OS << "\t.cfi_rel_offset ";
@@ -2137,26 +2138,26 @@ void MCAsmStreamer::emitCFIRelOffset(int64_t Register, int64_t Offset,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIAdjustCfaOffset(int64_t Adjustment, SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIAdjustCfaOffset(int64_t Adjustment, SMLoc Loc) {
   MCStreamer::emitCFIAdjustCfaOffset(Adjustment, Loc);
   OS << "\t.cfi_adjust_cfa_offset " << Adjustment;
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFISignalFrame() {
+void MCGNUAsmStreamer::emitCFISignalFrame() {
   MCStreamer::emitCFISignalFrame();
   OS << "\t.cfi_signal_frame";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIUndefined(int64_t Register, SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIUndefined(int64_t Register, SMLoc Loc) {
   MCStreamer::emitCFIUndefined(Register, Loc);
   OS << "\t.cfi_undefined ";
   EmitRegisterName(Register);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIRegister(int64_t Register1, int64_t Register2,
+void MCGNUAsmStreamer::emitCFIRegister(int64_t Register1, int64_t Register2,
                                     SMLoc Loc) {
   MCStreamer::emitCFIRegister(Register1, Register2, Loc);
   OS << "\t.cfi_register ";
@@ -2166,50 +2167,50 @@ void MCAsmStreamer::emitCFIRegister(int64_t Register1, int64_t Register2,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIWindowSave(SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFIWindowSave(SMLoc Loc) {
   MCStreamer::emitCFIWindowSave(Loc);
   OS << "\t.cfi_window_save";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFINegateRAState(SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFINegateRAState(SMLoc Loc) {
   MCStreamer::emitCFINegateRAState(Loc);
   OS << "\t.cfi_negate_ra_state";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFINegateRAStateWithPC(SMLoc Loc) {
+void MCGNUAsmStreamer::emitCFINegateRAStateWithPC(SMLoc Loc) {
   MCStreamer::emitCFINegateRAStateWithPC(Loc);
   OS << "\t.cfi_negate_ra_state_with_pc";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIReturnColumn(int64_t Register) {
+void MCGNUAsmStreamer::emitCFIReturnColumn(int64_t Register) {
   MCStreamer::emitCFIReturnColumn(Register);
   OS << "\t.cfi_return_column ";
   EmitRegisterName(Register);
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFILabelDirective(SMLoc Loc, StringRef Name) {
+void MCGNUAsmStreamer::emitCFILabelDirective(SMLoc Loc, StringRef Name) {
   MCStreamer::emitCFILabelDirective(Loc, Name);
   OS << "\t.cfi_label " << Name;
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIBKeyFrame() {
+void MCGNUAsmStreamer::emitCFIBKeyFrame() {
   MCStreamer::emitCFIBKeyFrame();
   OS << "\t.cfi_b_key_frame";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIMTETaggedFrame() {
+void MCGNUAsmStreamer::emitCFIMTETaggedFrame() {
   MCStreamer::emitCFIMTETaggedFrame();
   OS << "\t.cfi_mte_tagged_frame";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCFIValOffset(int64_t Register, int64_t Offset,
+void MCGNUAsmStreamer::emitCFIValOffset(int64_t Register, int64_t Offset,
                                      SMLoc Loc) {
   MCStreamer::emitCFIValOffset(Register, Offset, Loc);
   OS << "\t.cfi_val_offset ";
@@ -2218,7 +2219,7 @@ void MCAsmStreamer::emitCFIValOffset(int64_t Register, int64_t Offset,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFIStartProc(const MCSymbol *Symbol, SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFIStartProc(const MCSymbol *Symbol, SMLoc Loc) {
   MCStreamer::emitWinCFIStartProc(Symbol, Loc);
 
   OS << ".seh_proc ";
@@ -2226,28 +2227,28 @@ void MCAsmStreamer::emitWinCFIStartProc(const MCSymbol *Symbol, SMLoc Loc) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFIEndProc(SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFIEndProc(SMLoc Loc) {
   MCStreamer::emitWinCFIEndProc(Loc);
 
   OS << "\t.seh_endproc";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFIFuncletOrFuncEnd(SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFIFuncletOrFuncEnd(SMLoc Loc) {
   MCStreamer::emitWinCFIFuncletOrFuncEnd(Loc);
 
   OS << "\t.seh_endfunclet";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFISplitChained(SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFISplitChained(SMLoc Loc) {
   MCStreamer::emitWinCFISplitChained(Loc);
 
   OS << "\t.seh_splitchained";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinEHHandler(const MCSymbol *Sym, bool Unwind,
+void MCGNUAsmStreamer::emitWinEHHandler(const MCSymbol *Sym, bool Unwind,
                                      bool Except, SMLoc Loc) {
   MCStreamer::emitWinEHHandler(Sym, Unwind, Except, Loc);
 
@@ -2264,7 +2265,7 @@ void MCAsmStreamer::emitWinEHHandler(const MCSymbol *Sym, bool Unwind,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinEHHandlerData(SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinEHHandlerData(SMLoc Loc) {
   MCStreamer::emitWinEHHandlerData(Loc);
 
   // Switch sections. Don't call switchSection directly, because that will
@@ -2286,7 +2287,7 @@ void MCAsmStreamer::emitWinEHHandlerData(SMLoc Loc) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFIPushReg(MCRegister Register, SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFIPushReg(MCRegister Register, SMLoc Loc) {
   MCStreamer::emitWinCFIPushReg(Register, Loc);
 
   OS << "\t.seh_pushreg ";
@@ -2294,7 +2295,7 @@ void MCAsmStreamer::emitWinCFIPushReg(MCRegister Register, SMLoc Loc) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFISetFrame(MCRegister Register, unsigned Offset,
+void MCGNUAsmStreamer::emitWinCFISetFrame(MCRegister Register, unsigned Offset,
                                        SMLoc Loc) {
   MCStreamer::emitWinCFISetFrame(Register, Offset, Loc);
 
@@ -2304,14 +2305,14 @@ void MCAsmStreamer::emitWinCFISetFrame(MCRegister Register, unsigned Offset,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFIAllocStack(unsigned Size, SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFIAllocStack(unsigned Size, SMLoc Loc) {
   MCStreamer::emitWinCFIAllocStack(Size, Loc);
 
   OS << "\t.seh_stackalloc " << Size;
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFISaveReg(MCRegister Register, unsigned Offset,
+void MCGNUAsmStreamer::emitWinCFISaveReg(MCRegister Register, unsigned Offset,
                                       SMLoc Loc) {
   MCStreamer::emitWinCFISaveReg(Register, Offset, Loc);
 
@@ -2321,7 +2322,7 @@ void MCAsmStreamer::emitWinCFISaveReg(MCRegister Register, unsigned Offset,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFISaveXMM(MCRegister Register, unsigned Offset,
+void MCGNUAsmStreamer::emitWinCFISaveXMM(MCRegister Register, unsigned Offset,
                                       SMLoc Loc) {
   MCStreamer::emitWinCFISaveXMM(Register, Offset, Loc);
 
@@ -2331,7 +2332,7 @@ void MCAsmStreamer::emitWinCFISaveXMM(MCRegister Register, unsigned Offset,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFIPushFrame(bool Code, SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFIPushFrame(bool Code, SMLoc Loc) {
   MCStreamer::emitWinCFIPushFrame(Code, Loc);
 
   OS << "\t.seh_pushframe";
@@ -2340,42 +2341,42 @@ void MCAsmStreamer::emitWinCFIPushFrame(bool Code, SMLoc Loc) {
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFIEndProlog(SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFIEndProlog(SMLoc Loc) {
   MCStreamer::emitWinCFIEndProlog(Loc);
 
   OS << "\t.seh_endprologue";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFIBeginEpilogue(SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFIBeginEpilogue(SMLoc Loc) {
   MCStreamer::emitWinCFIBeginEpilogue(Loc);
 
   OS << "\t.seh_startepilogue";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFIEndEpilogue(SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFIEndEpilogue(SMLoc Loc) {
   MCStreamer::emitWinCFIEndEpilogue(Loc);
 
   OS << "\t.seh_endepilogue";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFIUnwindV2Start(SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFIUnwindV2Start(SMLoc Loc) {
   MCStreamer::emitWinCFIUnwindV2Start(Loc);
 
   OS << "\t.seh_unwindv2start";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitWinCFIUnwindVersion(uint8_t Version, SMLoc Loc) {
+void MCGNUAsmStreamer::emitWinCFIUnwindVersion(uint8_t Version, SMLoc Loc) {
   MCStreamer::emitWinCFIUnwindVersion(Version, Loc);
 
   OS << "\t.seh_unwindversion " << (unsigned)Version;
   EmitEOL();
 }
 
-void MCAsmStreamer::emitCGProfileEntry(const MCSymbolRefExpr *From,
+void MCGNUAsmStreamer::emitCGProfileEntry(const MCSymbolRefExpr *From,
                                        const MCSymbolRefExpr *To,
                                        uint64_t Count) {
   OS << "\t.cg_profile ";
@@ -2386,7 +2387,7 @@ void MCAsmStreamer::emitCGProfileEntry(const MCSymbolRefExpr *From,
   EmitEOL();
 }
 
-void MCAsmStreamer::AddEncodingComment(const MCInst &Inst,
+void MCGNUAsmStreamer::AddEncodingComment(const MCInst &Inst,
                                        const MCSubtargetInfo &STI) {
   raw_ostream &OS = getCommentOS();
   SmallString<256> Code;
@@ -2493,7 +2494,7 @@ void MCAsmStreamer::AddEncodingComment(const MCInst &Inst,
   }
 }
 
-void MCAsmStreamer::emitInstruction(const MCInst &Inst,
+void MCGNUAsmStreamer::emitInstruction(const MCInst &Inst,
                                     const MCSubtargetInfo &STI) {
   if (LFIRewriter && LFIRewriter->rewriteInst(Inst, *this, STI))
     return;
@@ -2529,7 +2530,7 @@ void MCAsmStreamer::emitInstruction(const MCInst &Inst,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitPseudoProbe(uint64_t Guid, uint64_t Index,
+void MCGNUAsmStreamer::emitPseudoProbe(uint64_t Guid, uint64_t Index,
                                     uint64_t Type, uint64_t Attr,
                                     uint64_t Discriminator,
                                     const MCPseudoProbeInlineStack &InlineStack,
@@ -2548,7 +2549,7 @@ void MCAsmStreamer::emitPseudoProbe(uint64_t Guid, uint64_t Index,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitRelocDirective(const MCExpr &Offset, StringRef Name,
+void MCGNUAsmStreamer::emitRelocDirective(const MCExpr &Offset, StringRef Name,
                                        const MCExpr *Expr, SMLoc) {
   OS << "\t.reloc ";
   MAI->printExpr(OS, Offset);
@@ -2560,12 +2561,12 @@ void MCAsmStreamer::emitRelocDirective(const MCExpr &Offset, StringRef Name,
   EmitEOL();
 }
 
-void MCAsmStreamer::emitAddrsig() {
+void MCGNUAsmStreamer::emitAddrsig() {
   OS << "\t.addrsig";
   EmitEOL();
 }
 
-void MCAsmStreamer::emitAddrsigSym(const MCSymbol *Sym) {
+void MCGNUAsmStreamer::emitAddrsigSym(const MCSymbol *Sym) {
   OS << "\t.addrsig_sym ";
   Sym->print(OS, MAI);
   EmitEOL();
@@ -2574,13 +2575,13 @@ void MCAsmStreamer::emitAddrsigSym(const MCSymbol *Sym) {
 /// EmitRawText - If this file is backed by an assembly streamer, this dumps
 /// the specified string in the output .s file.  This capability is
 /// indicated by the hasRawTextSupport() predicate.
-void MCAsmStreamer::emitRawTextImpl(StringRef String) {
+void MCGNUAsmStreamer::emitRawTextImpl(StringRef String) {
   String.consume_back("\n");
   OS << String;
   EmitEOL();
 }
 
-void MCAsmStreamer::finishImpl() {
+void MCGNUAsmStreamer::finishImpl() {
   // If we are generating dwarf for assembly source files dump out the sections.
   if (getContext().getGenDwarfForAssembly())
     MCGenDwarfInfo::Emit(this);
@@ -2605,7 +2606,7 @@ void MCAsmStreamer::finishImpl() {
   }
 }
 
-void MCAsmStreamer::emitDwarfUnitLength(uint64_t Length, const Twine &Comment) {
+void MCGNUAsmStreamer::emitDwarfUnitLength(uint64_t Length, const Twine &Comment) {
   // If the assembler on some target fills in the DWARF unit length, we
   // don't want to emit the length in the compiler. For example, the AIX
   // assembler requires the assembly file with the unit length omitted from
@@ -2617,7 +2618,7 @@ void MCAsmStreamer::emitDwarfUnitLength(uint64_t Length, const Twine &Comment) {
   MCStreamer::emitDwarfUnitLength(Length, Comment);
 }
 
-MCSymbol *MCAsmStreamer::emitDwarfUnitLength(const Twine &Prefix,
+MCSymbol *MCGNUAsmStreamer::emitDwarfUnitLength(const Twine &Prefix,
                                              const Twine &Comment) {
   // If the assembler on some target fills in the DWARF unit length, we
   // don't want to emit the length in the compiler. For example, the AIX
@@ -2630,7 +2631,7 @@ MCSymbol *MCAsmStreamer::emitDwarfUnitLength(const Twine &Prefix,
   return MCStreamer::emitDwarfUnitLength(Prefix, Comment);
 }
 
-void MCAsmStreamer::emitDwarfLineStartLabel(MCSymbol *StartSym) {
+void MCGNUAsmStreamer::emitDwarfLineStartLabel(MCSymbol *StartSym) {
   // If the assembler on some target fills in the DWARF unit length, we
   // don't want to emit the length in the compiler. For example, the AIX
   // assembler requires the assembly file with the unit length omitted from
@@ -2657,7 +2658,7 @@ void MCAsmStreamer::emitDwarfLineStartLabel(MCSymbol *StartSym) {
   MCStreamer::emitDwarfLineStartLabel(StartSym);
 }
 
-void MCAsmStreamer::emitDwarfLineEndEntry(MCSection *Section,
+void MCGNUAsmStreamer::emitDwarfLineEndEntry(MCSection *Section,
                                           MCSymbol *LastLabel,
                                           MCSymbol *EndLabel) {
   // If the targets write the raw debug line data for assembly output (We can
@@ -2684,7 +2685,7 @@ void MCAsmStreamer::emitDwarfLineEndEntry(MCSection *Section,
 }
 
 // Generate DWARF line sections for assembly mode without .loc/.file
-void MCAsmStreamer::emitDwarfAdvanceLineAddr(int64_t LineDelta,
+void MCGNUAsmStreamer::emitDwarfAdvanceLineAddr(int64_t LineDelta,
                                              const MCSymbol *LastLabel,
                                              const MCSymbol *Label,
                                              unsigned PointerSize) {
@@ -2727,6 +2728,6 @@ MCStreamer *llvm::createAsmStreamer(MCContext &Context,
                                     std::unique_ptr<MCInstPrinter> IP,
                                     std::unique_ptr<MCCodeEmitter> CE,
                                     std::unique_ptr<MCAsmBackend> MAB) {
-  return new MCAsmStreamer(Context, std::move(OS), std::move(IP), std::move(CE),
+  return new MCGNUAsmStreamer(Context, std::move(OS), std::move(IP), std::move(CE),
                            std::move(MAB));
 }
