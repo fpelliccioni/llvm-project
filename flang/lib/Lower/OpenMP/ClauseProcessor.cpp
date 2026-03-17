@@ -1488,16 +1488,37 @@ bool ClauseProcessor::processIsDevicePtr(
   return clauseFound;
 }
 
-bool ClauseProcessor::processLinear(mlir::omp::LinearClauseOps &result) const {
+bool ClauseProcessor::processLinear(mlir::omp::LinearClauseOps &result,
+                                    bool isDeclareSimd) const {
   lower::StatementContext stmtCtx;
   return findRepeatableClause<
       omp::clause::Linear>([&](const omp::clause::Linear &clause,
                                const parser::CharBlock &) {
     auto &objects = std::get<omp::ObjectList>(clause.t);
     static std::vector<mlir::Attribute> typeAttrs;
+    static std::vector<mlir::Attribute> linearModAttrs;
 
-    if (!result.linearVars.size())
+    if (!result.linearVars.size()) {
       typeAttrs.clear();
+      linearModAttrs.clear();
+    }
+
+    std::optional<mlir::omp::LinearModifier> explicitLinearMod;
+    if (auto &linearModifier =
+            std::get<std::optional<omp::clause::Linear::LinearModifier>>(
+                clause.t)) {
+      switch (*linearModifier) {
+      case omp::clause::Linear::LinearModifier::Val:
+        explicitLinearMod = mlir::omp::LinearModifier::val;
+        break;
+      case omp::clause::Linear::LinearModifier::Ref:
+        explicitLinearMod = mlir::omp::LinearModifier::ref;
+        break;
+      case omp::clause::Linear::LinearModifier::Uval:
+        explicitLinearMod = mlir::omp::LinearModifier::uval;
+        break;
+      }
+    }
 
     for (const omp::Object &object : objects) {
       semantics::Symbol *sym = object.sym();
@@ -1512,10 +1533,6 @@ bool ClauseProcessor::processLinear(mlir::omp::LinearClauseOps &result) const {
         mlir::Value operand =
             fir::getBase(converter.genExprValue(toEvExpr(*mod), stmtCtx));
         result.linearStepVars.append(objects.size(), operand);
-      } else if (std::get<std::optional<omp::clause::Linear::LinearModifier>>(
-                     clause.t)) {
-        mlir::Location currentLocation = converter.getCurrentLocation();
-        TODO(currentLocation, "Linear modifiers not yet implemented");
       } else {
         // If nothing is present, add the default step of 1.
         fir::FirOpBuilder &firOpBuilder = converter.getFirOpBuilder();
@@ -1525,9 +1542,40 @@ bool ClauseProcessor::processLinear(mlir::omp::LinearClauseOps &result) const {
             firOpBuilder.createIntegerConstant(currentLocation, integerTy, 1);
         result.linearStepVars.append(objects.size(), operand);
       }
+
+      // Determine the linear modifier per OpenMP 5.2, Section 5.4.6.
+      // If explicitly specified, use it. Otherwise, apply defaults:
+      //
+      // declare simd: if the list item has the POINTER
+      // attribute, or is a dummy argument without the VALUE attribute,
+      // default is "ref". Otherwise, default is "val".
+      //
+      // do/for/private/simd/taskloop: always "val".
+      mlir::omp::LinearModifier linearMod;
+      if (explicitLinearMod) {
+        linearMod = *explicitLinearMod;
+      } else if (isDeclareSimd) {
+        const auto &ultimate = sym->GetUltimate();
+        if (semantics::IsPointer(ultimate))
+          linearMod = mlir::omp::LinearModifier::ref;
+        else if (const auto *obj =
+                     ultimate.detailsIf<semantics::ObjectEntityDetails>()) {
+          linearMod = (obj->isDummy() && !semantics::IsValue(ultimate))
+                          ? mlir::omp::LinearModifier::ref
+                          : mlir::omp::LinearModifier::val;
+        } else {
+          linearMod = mlir::omp::LinearModifier::val;
+        }
+      } else {
+        linearMod = mlir::omp::LinearModifier::val;
+      }
+      linearModAttrs.push_back(mlir::omp::LinearModifierAttr::get(
+          &converter.getMLIRContext(), linearMod));
     }
     result.linearVarTypes =
         mlir::ArrayAttr::get(&converter.getMLIRContext(), typeAttrs);
+    result.linearModifiers =
+        mlir::ArrayAttr::get(&converter.getMLIRContext(), linearModAttrs);
   });
 }
 

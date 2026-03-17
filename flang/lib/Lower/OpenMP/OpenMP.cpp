@@ -1671,11 +1671,15 @@ genSimdImplicitLinear(lower::AbstractConverter &converter,
   }
 
   std::vector<mlir::Attribute> typeAttrs;
+  std::vector<mlir::Attribute> linearModAttrs;
   // If attributes from explicit `linear(...)` clause are present,
   // carry them forward.
   if (clauseOps.linearVarTypes && !clauseOps.linearVarTypes.empty())
     typeAttrs.assign(clauseOps.linearVarTypes.begin(),
                      clauseOps.linearVarTypes.end());
+  if (clauseOps.linearModifiers && !clauseOps.linearModifiers.empty())
+    linearModAttrs.assign(clauseOps.linearModifiers.begin(),
+                          clauseOps.linearModifiers.end());
 
   for (auto [loopVar, loopStep] : llvm::zip(iv, loopNestClauseOps.loopSteps)) {
     const mlir::Value variable = converter.getSymbolAddress(*loopVar);
@@ -1696,13 +1700,18 @@ genSimdImplicitLinear(lower::AbstractConverter &converter,
           Fortran::semantics::IsAllocatableOrPointer(loopVar->GetUltimate()))) {
       mlir::Type ty = converter.genType(*loopVar);
       typeAttrs.push_back(mlir::TypeAttr::get(ty));
+      linearModAttrs.push_back(mlir::omp::LinearModifierAttr::get(
+          &converter.getMLIRContext(), mlir::omp::LinearModifier::val));
       clauseOps.linearVars.push_back(variable);
       clauseOps.linearStepVars.push_back(loopStep);
     }
   }
-  if (!typeAttrs.empty())
+  if (!typeAttrs.empty()) {
     clauseOps.linearVarTypes =
         mlir::ArrayAttr::get(&converter.getMLIRContext(), typeAttrs);
+    clauseOps.linearModifiers =
+        mlir::ArrayAttr::get(&converter.getMLIRContext(), linearModAttrs);
+  }
 }
 
 static void genSingleClauses(lower::AbstractConverter &converter,
@@ -4032,7 +4041,7 @@ genOMP(lower::AbstractConverter &converter, lower::SymMap &symTable,
   ClauseProcessor cp(converter, semaCtx, clauses);
   cp.processAligned(clauseOps);
   cp.processInbranch(clauseOps);
-  cp.processLinear(clauseOps);
+  cp.processLinear(clauseOps, /*isDeclareSimd=*/true);
   cp.processNotinbranch(clauseOps);
   cp.processSimdlen(clauseOps);
   cp.processUniform(clauseOps);
