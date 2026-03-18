@@ -3523,6 +3523,17 @@ func.func @omp_declare_simd_linear_mixed_modifiers(%a: i32, %b: memref<i32>,
   return
 }
 
+// CHECK-LABEL: func.func @omp_declare_simd_linear_mixed_with_non_modifiers
+func.func @omp_declare_simd_linear_mixed_with_non_modifiers(
+    %a: i32, %b: memref<i32>, %c: i32, %s1: i32, %s2: i32, %s3: i32) -> () {
+  // CHECK: omp.declare_simd
+  // CHECK-SAME: linear(val(%{{.*}} : i32 = %{{.*}} : i32), %{{.*}} : memref<i32> = %{{.*}} : i32, ref(%{{.*}} : i32 = %{{.*}} : i32))
+  omp.declare_simd linear(val(%a : i32 = %s1 : i32),
+                          %b : memref<i32> = %s2 : i32,
+                          ref(%c : i32 = %s3 : i32))
+  return
+}
+
 // CHECK-LABEL: func.func @omp_declare_simd_uniform
 func.func @omp_declare_simd_uniform(%a: f64, %b: f64,
                                     %p0: memref<i32>, %p1: memref<i32>) -> () {

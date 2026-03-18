@@ -463,13 +463,14 @@ static ParseResult parseLinearClause(
     if (linearModifier) {
       modifiers.push_back(
           omp::LinearModifierAttr::get(parser.getContext(), *linearModifier));
+    } else {
+      modifiers.push_back(UnitAttr::get(parser.getContext()));
     }
     return success();
   });
   if (failed(result))
     return failure();
-  if (!modifiers.empty())
-    linearModifiers = ArrayAttr::get(parser.getContext(), modifiers);
+  linearModifiers = ArrayAttr::get(parser.getContext(), modifiers);
   return success();
 }
 
