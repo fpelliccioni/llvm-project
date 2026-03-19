@@ -1543,34 +1543,38 @@ bool ClauseProcessor::processLinear(mlir::omp::LinearClauseOps &result,
         result.linearStepVars.append(objects.size(), operand);
       }
 
-      // Determine the linear modifier per OpenMP 5.2, Section 5.4.6.
-      // If explicitly specified, use it. Otherwise, apply defaults:
-      //
-      // declare simd: if the list item has the POINTER
-      // attribute, or is a dummy argument without the VALUE attribute,
-      // default is "ref". Otherwise, default is "val".
-      //
-      // do/for/private/simd/taskloop: always "val".
-      mlir::omp::LinearModifier linearMod;
-      if (explicitLinearMod) {
-        linearMod = *explicitLinearMod;
-      } else if (isDeclareSimd) {
-        const auto &ultimate = sym->GetUltimate();
+      // Determine the linear modifier:
+      // 1. Use explicit modifier if provided.
+      // 2. For OpenMP >= 5.2 (Section 5.4.6: "the default linear-modifier
+      //    is val"):
+      //    - declare simd: "ref" for POINTER or non-VALUE dummy args,
+      //      "val" otherwise.
+      //    - do/simd: always "val".
+      // 3. Otherwise, leave unset (UnitAttr placeholder).
+      auto getDeclareSimdDefaultMod = [](const semantics::Symbol &sym) {
+        const auto &ultimate = sym.GetUltimate();
         if (semantics::IsPointer(ultimate))
-          linearMod = mlir::omp::LinearModifier::ref;
-        else if (const auto *obj =
-                     ultimate.detailsIf<semantics::ObjectEntityDetails>()) {
-          linearMod = (obj->isDummy() && !semantics::IsValue(ultimate))
-                          ? mlir::omp::LinearModifier::ref
-                          : mlir::omp::LinearModifier::val;
-        } else {
-          linearMod = mlir::omp::LinearModifier::val;
-        }
-      } else {
-        linearMod = mlir::omp::LinearModifier::val;
-      }
-      linearModAttrs.push_back(mlir::omp::LinearModifierAttr::get(
-          &converter.getMLIRContext(), linearMod));
+          return mlir::omp::LinearModifier::ref;
+        if (const auto *obj =
+                ultimate.detailsIf<semantics::ObjectEntityDetails>())
+          if (obj->isDummy() && !semantics::IsValue(ultimate))
+            return mlir::omp::LinearModifier::ref;
+        return mlir::omp::LinearModifier::val;
+      };
+
+      std::optional<mlir::omp::LinearModifier> linearMod;
+      if (explicitLinearMod)
+        linearMod = *explicitLinearMod;
+      else if (semaCtx.langOptions().OpenMPVersion >= 52)
+        linearMod = isDeclareSimd ? getDeclareSimdDefaultMod(*sym)
+                                  : mlir::omp::LinearModifier::val;
+
+      if (linearMod)
+        linearModAttrs.push_back(mlir::omp::LinearModifierAttr::get(
+            &converter.getMLIRContext(), *linearMod));
+      else
+        linearModAttrs.push_back(
+            mlir::UnitAttr::get(&converter.getMLIRContext()));
     }
     result.linearVarTypes =
         mlir::ArrayAttr::get(&converter.getMLIRContext(), typeAttrs);

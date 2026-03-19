@@ -1700,8 +1700,8 @@ genSimdImplicitLinear(lower::AbstractConverter &converter,
           Fortran::semantics::IsAllocatableOrPointer(loopVar->GetUltimate()))) {
       mlir::Type ty = converter.genType(*loopVar);
       typeAttrs.push_back(mlir::TypeAttr::get(ty));
-      linearModAttrs.push_back(mlir::omp::LinearModifierAttr::get(
-          &converter.getMLIRContext(), mlir::omp::LinearModifier::val));
+      linearModAttrs.push_back(
+          mlir::UnitAttr::get(&converter.getMLIRContext()));
       clauseOps.linearVars.push_back(variable);
       clauseOps.linearStepVars.push_back(loopStep);
     }

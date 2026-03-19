@@ -165,7 +165,11 @@ end subroutine declare_simd_combined
 ! CHECK: return
 
 subroutine declare_simd_linear_val(a, b)
+#ifdef OMP_60
+!$omp declare_simd linear(a : val, step(2)) linear(b : val)
+#else
 !$omp declare simd linear(a : val, step(2)) linear(b : val)
+#endif
   integer, intent(in) :: a, b
 end subroutine declare_simd_linear_val
 
@@ -180,7 +184,11 @@ end subroutine declare_simd_linear_val
 ! CHECK: return
 
 subroutine declare_simd_linear_ref(x)
+#ifdef OMP_60
+!$omp declare_simd linear(x : ref, step(4))
+#else
 !$omp declare simd linear(x : ref, step(4))
+#endif
   integer, allocatable, intent(inout) :: x
 end subroutine declare_simd_linear_ref
 
@@ -193,7 +201,11 @@ end subroutine declare_simd_linear_ref
 ! CHECK: return
 
 subroutine declare_simd_linear_uval(y)
+#ifdef OMP_60
+!$omp declare_simd linear(y : uval)
+#else
 !$omp declare simd linear(y : uval)
+#endif
   integer, intent(in) :: y
 end subroutine declare_simd_linear_uval
 
