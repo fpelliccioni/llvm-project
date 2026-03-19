@@ -15285,6 +15285,43 @@ BoUpSLP::getEntryCost(const TreeEntry *E, ArrayRef<Value *> VectorizedVals,
   unsigned EntryVF = E->getVectorFactor();
   auto *FinalVecTy = getWidenedType(ScalarTy, EntryVF);
 
+  InstructionCost SpillsReloads = 0;
+  // Used regs by this node + its operands.
+  unsigned NumUsedRegs = 0;
+  if (E->hasState() && E->getOpcode() != Instruction::Store &&
+      E->getOpcode() != Instruction::InsertElement &&
+      E->getOpcode() != Instruction::ExtractElement &&
+      E->getOpcode() != Instruction::ExtractValue &&
+      E->getOpcode() != Instruction::Freeze &&
+      (E->getOpcode() != Instruction::Load ||
+       E->State == TreeEntry::ScatterVectorize)) {
+    for (unsigned Idx : seq<unsigned>(E->getNumOperands())) {
+      ArrayRef<Value *> Ops = E->getOperand(Idx);
+      if (Ops.empty())
+        continue;
+      Value *Op = Ops.front();
+      if (!Op)
+        continue;
+      auto *OpVecTy = getWidenedType(Op->getType(), Ops.size());
+      NumUsedRegs += ::getNumberOfParts(*TTI, OpVecTy);
+    }
+  }
+  const unsigned RegClass =
+      TTI->getRegisterClassForType(/*Vector=*/true, FinalVecTy);
+  const unsigned NumAvailRegs = TTI->getNumberOfRegisters(RegClass);
+  // Used all the registers - definitely need spill/reload, so include the
+  // cost.
+  if (NumUsedRegs > NumAvailRegs) {
+    InstructionCost SingleRegSpillReload =
+        TTI->getRegisterClassReloadCost(RegClass, CostKind);
+    // No need to spill for reduction and non-returning instructions, like
+    // stores.
+    if (E->Idx > 0 || !UserIgnoreList || VL[0]->getType()->isVoidTy())
+      SingleRegSpillReload +=
+          TTI->getRegisterClassSpillCost(RegClass, CostKind);
+    SpillsReloads =
+        SingleRegSpillReload * (NumUsedRegs / NumAvailRegs) * NumAvailRegs;
+  }
   if (E->isGather() || TransformedToGatherNodes.contains(E)) {
     if (allConstant(VL))
       return 0;
@@ -15292,8 +15329,9 @@ BoUpSLP::getEntryCost(const TreeEntry *E, ArrayRef<Value *> VectorizedVals,
       return InstructionCost::getInvalid();
     if (isa<CmpInst>(VL.front()))
       ScalarTy = VL.front()->getType();
-    return processBuildVector<ShuffleCostEstimator, InstructionCost>(
-        E, ScalarTy, *TTI, VectorizedVals, *this, CheckedExtracts);
+    return SpillsReloads +
+           processBuildVector<ShuffleCostEstimator, InstructionCost>(
+               E, ScalarTy, *TTI, VectorizedVals, *this, CheckedExtracts);
   }
   if (E->State == TreeEntry::SplitVectorize) {
     assert(E->CombinedEntriesWithIndices.size() == 2 &&
@@ -15318,6 +15356,7 @@ BoUpSLP::getEntryCost(const TreeEntry *E, ArrayRef<Value *> VectorizedVals,
                                     getWidenedType(ScalarTy, CommonVF),
                                     E->getSplitMask(), CostKind);
     }
+    VectorCost += SpillsReloads;
     LLVM_DEBUG(dumpTreeCosts(E, 0, VectorCost, 0, "Calculated costs for Tree"));
     return VectorCost;
   }
@@ -15433,6 +15472,7 @@ BoUpSLP::getEntryCost(const TreeEntry *E, ArrayRef<Value *> VectorizedVals,
             }
           }
         }
+        VecCost += SpillsReloads;
         LLVM_DEBUG(dumpTreeCosts(E, CommonCost, VecCost - CommonCost,
                                  ScalarCost, "Calculated costs for Tree"));
         return VecCost - ScalarCost;
