@@ -101,7 +101,7 @@ class MarkDeclareTargetPass
         .Case([&](omp::TaskgroupOp op) {
           processReductionRefs(op.getTaskReductionSyms(), parentInfo, visited);
         })
-        .Case([&](omp::TaskloopOp op) {
+        .Case([&](omp::TaskloopContextOp op) {
           processReductionRefs(op.getReductionSyms(), parentInfo, visited);
           processReductionRefs(op.getInReductionSyms(), parentInfo, visited);
         })
