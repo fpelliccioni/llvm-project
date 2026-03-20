@@ -202,6 +202,9 @@ struct LoopSequence {
   const Depth &depth() const { return depth_; }
   const std::vector<LoopSequence> &children() const { return children_; }
 
+  WithReason<bool> isWellFormedSequence() const;
+  WithReason<bool> isWellFormedNest() const;
+
 private:
   using Construct = ExecutionPartIterator::Construct;
 
