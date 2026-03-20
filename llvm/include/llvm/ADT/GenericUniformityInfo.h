@@ -52,6 +52,7 @@ public:
   void compute() {
     DA->initialize();
     DA->compute();
+    DA->registerCallbacks();
   }
 
   /// Whether any divergence was detected.
