@@ -139,12 +139,6 @@ cmake_path(NORMAL_PATH FLANG_RT_INSTALL_RESOURCE_LIB_PATH)
 # Important: flang-rt user options must be prefixed with "FLANG_RT_". Variables
 # with this prefix will be forwarded in bootstrap builds.
 
-# TODO: Support tests for the GPU target.
-set(FLANG_RT_INCLUDE_TESTS_default ${LLVM_INCLUDE_TESTS})
-if ("${LLVM_RUNTIMES_TARGET}" MATCHES "^amdgcn|^nvptx")
-  set(FLANG_RT_INCLUDE_TESTS_default OFF)
-endif()
-option(FLANG_RT_INCLUDE_TESTS "Generate build targets for the flang-rt unit and regression-tests." "${FLANG_RT_INCLUDE_TESTS_default}")
 
 # Provide an interface to link against the LLVM libc/libc++ projects directly.
 set(FLANG_RT_SUPPORTED_PROVIDERS system llvm)
@@ -158,7 +152,15 @@ if (NOT "${FLANG_RT_LIBCXX_PROVIDER}" IN_LIST FLANG_RT_SUPPORTED_PROVIDERS)
   message(FATAL_ERROR "Unsupported library: '${FLANG_RT_LIBCXX_PROVIDER}'. Supported values are ${FLANG_RT_SUPPORTED_PROVIDERS}.")
 endif ()
 
-option(FLANG_RT_ENABLE_STATIC "Build Flang-RT as a static library." ON)
+if (LLVM_RUNTIMES_TARGET MATCHES "^amdgcn|^nvptx")
+  # Compiling libraries for offload targets is currently experimental;
+  # Only build the builtin modules by default.
+  set(FLANG_RT_ENABLE_STATIC_default OFF)
+else ()
+  set(FLANG_RT_ENABLE_STATIC_default ON)
+endif ()
+option(FLANG_RT_ENABLE_STATIC "Build Flang-RT as a static library." "${FLANG_RT_ENABLE_STATIC_default}")
+
 if (WIN32)
   # Windows DLL currently not implemented.
   set(FLANG_RT_ENABLE_SHARED OFF)
@@ -171,11 +173,18 @@ else ()
   #       breaking change unless the driver is changed.
   option(FLANG_RT_ENABLE_SHARED "Build Flang-RT as a shared library." OFF)
 endif ()
-if (NOT FLANG_RT_ENABLE_STATIC AND NOT FLANG_RT_ENABLE_SHARED)
-  message(FATAL_ERROR "
-      Must build at least one type of library
-      (FLANG_RT_ENABLE_STATIC=ON, FLANG_RT_ENABLE_SHARED=ON, or both)
-    ")
+
+
+# TODO: Support tests for the GPU target.
+set(FLANG_RT_INCLUDE_TESTS_default ${LLVM_INCLUDE_TESTS})
+if ("${LLVM_RUNTIMES_TARGET}" MATCHES "^amdgcn|^nvptx")
+  set(FLANG_RT_INCLUDE_TESTS_default OFF)
+endif()
+if (FLANG_RT_ENABLE_STATIC OR FLANG_RT_ENABLE_SHARED)
+  option(FLANG_RT_INCLUDE_TESTS "Generate build targets for the flang-rt unit and regression-tests." "${FLANG_RT_INCLUDE_TESTS_default}")
+else ()
+  # Tests require at least one of the libraries
+  set(FLANG_RT_INCLUDE_TESTS OFF)
 endif ()
 
 
