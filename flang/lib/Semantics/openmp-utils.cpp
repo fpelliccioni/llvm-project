@@ -926,7 +926,7 @@ WithReason<std::pair<int64_t, int64_t>> GetAffectedLoopRangeWithReason(
     // associated sequence".
     Reason reason;
     reason.Say(spec.source,
-        "%s clause was not specified, a value of 1 was assumed"_because_en_US,
+        "%s clause was not specified, the entire sequence is affected by"_because_en_US,
         name.c_str());
     return {std::make_pair(1, -1), std::move(reason)};
   }
