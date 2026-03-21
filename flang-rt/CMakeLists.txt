@@ -152,15 +152,7 @@ if (NOT "${FLANG_RT_LIBCXX_PROVIDER}" IN_LIST FLANG_RT_SUPPORTED_PROVIDERS)
   message(FATAL_ERROR "Unsupported library: '${FLANG_RT_LIBCXX_PROVIDER}'. Supported values are ${FLANG_RT_SUPPORTED_PROVIDERS}.")
 endif ()
 
-if (LLVM_RUNTIMES_TARGET MATCHES "^amdgcn|^nvptx")
-  # Compiling libraries for offload targets is currently experimental;
-  # Only build the builtin modules by default.
-  set(FLANG_RT_ENABLE_STATIC_default OFF)
-else ()
-  set(FLANG_RT_ENABLE_STATIC_default ON)
-endif ()
-option(FLANG_RT_ENABLE_STATIC "Build Flang-RT as a static library." "${FLANG_RT_ENABLE_STATIC_default}")
-
+option(FLANG_RT_ENABLE_STATIC "Build Flang-RT as a static library." ON)
 if (WIN32)
   # Windows DLL currently not implemented.
   set(FLANG_RT_ENABLE_SHARED OFF)
