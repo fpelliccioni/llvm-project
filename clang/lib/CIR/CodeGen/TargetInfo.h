@@ -19,6 +19,7 @@
 #include "mlir/Dialect/Ptr/IR/MemorySpaceInterfaces.h"
 #include "clang/Basic/AddressSpaces.h"
 #include "clang/CIR/Dialect/IR/CIRAttrs.h"
+#include "clang/CIR/Dialect/IR/CIRDialect.h"
 #include "clang/CIR/Dialect/IR/CIROpsEnums.h"
 
 #include <memory>
@@ -134,6 +135,10 @@ public:
 
 std::unique_ptr<TargetCIRGenInfo>
 createAMDGPUTargetCIRGenInfo(CIRGenTypes &cgt);
+
+/// Set AMDGPU-specific function attributes for HIP kernels.
+void setAMDGPUTargetFunctionAttributes(const clang::Decl *decl,
+                                       cir::FuncOp func, CIRGenModule &cgm);
 
 std::unique_ptr<TargetCIRGenInfo> createX8664TargetCIRGenInfo(CIRGenTypes &cgt);
 
