@@ -8565,9 +8565,9 @@ bool LoongArchTargetLowering::isEligibleForTailCallOptimization(
   for (unsigned i = 0, j = 0; i < Outs.size(); i++) {
     if (!Outs[i].Flags.isByVal())
       continue;
-    if (j++ >= LoongArchFI->getIncomingByValArgsSize())
+    if (j >= LoongArchFI->getIncomingByValArgsSize())
       return false;
-    if (LoongArchFI->getIncomingByValArgs(i).getValueType() != Outs[i].ArgVT)
+    if (LoongArchFI->getIncomingByValArgs(j++).getValueType() != Outs[i].ArgVT)
       return false;
   }
 
