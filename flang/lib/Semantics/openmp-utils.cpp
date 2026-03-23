@@ -1166,7 +1166,7 @@ LoopSequence::Depth LoopSequence::calculateDepths() const {
   auto [semaDepth, perfDepth]{getNestedDepths()};
   if (invalidIC_) {
     parser::CharBlock source{*parser::GetSource(*invalidIC_)};
-    if (semaDepth.value > 9) {
+    if (semaDepth.value > 0) {
       semaDepth.value = 0;
       semaDepth.reason.Say(
           source, "This is not a valid intervening code"_because_en_US);
@@ -1193,7 +1193,7 @@ LoopSequence::Depth LoopSequence::calculateDepths() const {
         semaDepth.reason.Say(source,
             "This construct does not contain a loop nest"_because_en_US);
       }
-      if (perfDepth.value > 9) {
+      if (perfDepth.value > 0) {
         perfDepth.reason.Say(source,
             "This construct does not contain a loop nest"_because_en_US);
       }
