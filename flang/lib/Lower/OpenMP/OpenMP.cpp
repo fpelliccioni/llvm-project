@@ -3251,7 +3251,7 @@ static mlir::omp::TaskloopContextOp genStandaloneTaskloop(
     lower::pft::Evaluation &eval, mlir::Location loc,
     const ConstructQueue &queue, ConstructQueue::const_iterator item) {
   mlir::omp::TaskloopContextOperands taskloopClauseOps;
-  mlir::omp::TaskloopOperands wrapperClauseOps;
+  mlir::omp::TaskloopWrapperOperands wrapperClauseOps;
   llvm::SmallVector<const semantics::Symbol *> reductionSyms;
   llvm::SmallVector<const semantics::Symbol *> inReductionSyms;
 
@@ -3283,7 +3283,7 @@ static mlir::omp::TaskloopContextOp genStandaloneTaskloop(
 
   mlir::OpBuilder::InsertionGuard guard(firOpBuilder);
   firOpBuilder.setInsertionPointToStart(&taskLoopContextOp.getRegion().front());
-  auto taskLoopOp = genWrapperOp<mlir::omp::TaskloopOp>(
+  auto taskLoopOp = genWrapperOp<mlir::omp::TaskloopWrapperOp>(
       converter, loc, wrapperClauseOps, taskloopArgs);
 
   genLoopNestOp(converter, symTable, semaCtx, eval, loc, queue, item,
@@ -3584,7 +3584,7 @@ static mlir::omp::WsloopOp genCompositeDoSimd(
   return wsloopOp;
 }
 
-static mlir::omp::TaskloopOp genCompositeTaskloopSimd(
+static mlir::omp::TaskloopWrapperOp genCompositeTaskloopSimd(
     lower::AbstractConverter &converter, lower::SymMap &symTable,
     lower::StatementContext &stmtCtx, semantics::SemanticsContext &semaCtx,
     lower::pft::Evaluation &eval, mlir::Location loc,
