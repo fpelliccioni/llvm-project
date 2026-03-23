@@ -167,8 +167,6 @@ private:
   unsigned TotalCycles = 0;
   // InstructionFlavor mapping
   AMDGPU::InstructionFlavor Type;
-  // Idx mapping
-  unsigned Idx;
   // Whether or not instructions on this HardwareUnit may produce a window in
   // which instructions in other HardwareUnits can coexecute. For example, WMMA
   // / MFMA instructions may take multiple cycles, which may be overlapped with
@@ -188,8 +186,6 @@ public:
   }
 
   AMDGPU::InstructionFlavor getType() const { return Type; }
-
-  unsigned getIdx() const { return Idx; }
 
   bool producesCoexecWindow() const { return ProducesCoexecWindow; }
 
@@ -230,10 +226,10 @@ public:
   /// long latency (e.g. memory instructions). If we have many long latency
   /// dependencies, it is beneficial to enable SUs multiple levels ahead.
   SUnit *getNextTargetSU(bool LookDeep = false);
-  /// insert the \p SU into the AllSUs and account its \p BlockingCycles into
+  /// Insert the \p SU into the AllSUs and account its \p BlockingCycles into
   /// the TotalCycles. This maintains the list of PrioritySUs.
   void insert(SUnit *SU, unsigned BlockingCycles);
-  /// schedule the \p SU by removing it from the AllSus and reducing its \p
+  /// Schedule the \p SU by removing it from the AllSus and reducing its \p
   /// BlockingCycles from the TotalCycles. This maintains the list of
   /// PrioritySUS.
   void schedule(SUnit *SU, unsigned BlockingCycles);

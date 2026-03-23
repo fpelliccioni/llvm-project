@@ -191,6 +191,7 @@ unsigned CandidateHeuristics::getHWUICyclesForInst(SUnit *SU) {
 void CandidateHeuristics::schedNode(SUnit *SU) {
   HardwareUnitInfo *HWUI =
       getHWUIFromFlavor(classifyFlavor(*SU->getInstr(), *SII));
+  assert(HWUI);
   HWUI->schedule(SU, getHWUICyclesForInst(SU));
 }
 
@@ -241,9 +242,8 @@ void CandidateHeuristics::dumpRegionSummary() {
       continue;
 
     StringRef Name = getFlavorName(HWUI.getType());
-    dbgs() << "  [" << HWUI.getIdx() << "] " << Name << ": "
-           << HWUI.getTotalCycles() << " cycles, " << HWUI.size()
-           << " instrs\n";
+    dbgs() << "  " << Name << ": " << HWUI.getTotalCycles() << " cycles, "
+           << HWUI.size() << " instrs\n";
   }
   dbgs() << "\n";
 }
@@ -259,12 +259,12 @@ void CandidateHeuristics::sortHWUIResources() {
     if (A.getTotalCycles() != B.getTotalCycles())
       return A.getTotalCycles() > B.getTotalCycles();
 
-    // In ties -- prefer the resource with longer latency instructions
+    // In ties -- prefer the resource with more instructions
     if (A.size() != B.size())
       return A.size() < B.size();
 
-    // Default to HardwareUnitInfo order
-    return A.getIdx() < B.getIdx();
+    // Default to Flavor order
+    return (unsigned)A.getType() < (unsigned)B.getType();
   });
 }
 
@@ -272,7 +272,7 @@ bool CandidateHeuristics::tryCriticalResourceDependency(
     GenericSchedulerBase::SchedCandidate &TryCand,
     GenericSchedulerBase::SchedCandidate &Cand, SchedBoundary *Zone) const {
 
-  auto IsCandidateResource = [this, &Cand, &TryCand](unsigned ResourceIdx) {
+  auto HasPrioritySU = [this, &Cand, &TryCand](unsigned ResourceIdx) {
     HardwareUnitInfo HWUI = HWUInfo[ResourceIdx];
 
     auto CandFlavor = classifyFlavor(*Cand.SU->getInstr(), *SII);
@@ -319,8 +319,8 @@ bool CandidateHeuristics::tryCriticalResourceDependency(
     }
 
     // Both enable, prefer the critical path.
-    bool CandHeight = Cand.SU->getHeight();
-    bool TryCandHeight = TryCand.SU->getHeight();
+    unsigned CandHeight = Cand.SU->getHeight();
+    unsigned TryCandHeight = TryCand.SU->getHeight();
 
     if (CandHeight > TryCandHeight) {
       if (Cand.Reason > GenericSchedulerBase::RegCritical)
@@ -344,8 +344,8 @@ bool CandidateHeuristics::tryCriticalResourceDependency(
   for (unsigned I = 0; I < HWUInfo.size(); I++) {
     // If we have encountered a resource that is not critical, then neither
     // candidate enables a critical resource
-    if (!IsCandidateResource(I))
-      return false;
+    if (!HasPrioritySU(I))
+      continue;
 
     bool Enabled = TryEnablesResource(I);
     // If neither has enabled the resource, continue to the next resource
