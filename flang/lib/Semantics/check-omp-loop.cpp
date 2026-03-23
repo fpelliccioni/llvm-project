@@ -272,10 +272,14 @@ void OmpStructureChecker::CheckNestedConstruct(
   auto needRange{GetAffectedLoopRangeWithReason(beginSpec, version)};
   auto haveLength{sequence.length()};
 
+  const auto MsgShouldContainDoOr{
+      "This construct should contain a DO-loop or a loop-%s-generating construct"_err_en_US};
+  const auto MsgRequiresCanonical{
+      "This construct requires a canonical loop %s"_err_en_US};
+
   if (assoc == llvm::omp::Association::LoopNest) {
     if (sequence.children().size() == 0) {
-      context_.Say(beginSource,
-          "This construct should contain a DO-loop or a loop-nest-generating construct"_err_en_US);
+      context_.Say(beginSource, MsgShouldContainDoOr, "nest");
     } else if (haveLength.value > 1) {
       auto &msg{context_.Say(beginSource,
           "This construct applies to a loop nest, but has a loop sequence of "
@@ -285,8 +289,7 @@ void OmpStructureChecker::CheckNestedConstruct(
     }
     auto [isWellFormed, whyNot]{sequence.isWellFormedNest()};
     if (isWellFormed && !*isWellFormed) {
-      auto &msg{context_.Say(beginSource,
-          "This construct requires a canonical loop nest"_err_en_US)};
+      auto &msg{context_.Say(beginSource, MsgRequiresCanonical, "nest")};
       whyNot.AttachTo(msg);
     }
 
@@ -314,13 +317,11 @@ void OmpStructureChecker::CheckNestedConstruct(
 
   } else if (assoc == llvm::omp::Association::LoopSeq) {
     if (haveLength.value == 0) {
-      context_.Say(beginSource,
-          "This construct should contain a DO-loop or a loop-sequence-generating construct"_err_en_US);
+      context_.Say(beginSource, MsgShouldContainDoOr, "sequence");
     } else {
       auto [isWellFormed, whyNot]{sequence.isWellFormedSequence()};
       if (isWellFormed && !*isWellFormed) {
-        auto &msg{context_.Say(beginSource,
-            "This construct requires a canonical loop sequence"_err_en_US)};
+        auto &msg{context_.Say(beginSource, MsgRequiresCanonical, "sequence")};
         whyNot.AttachTo(msg);
       }
       if (auto requiredCount{GetRequiredCount(needRange.value)}) {
