@@ -75,11 +75,8 @@ private:
 
     // Strip the "cir." prefix to get the LLVM attribute name.
     llvm::StringRef llvmAttrName = attrName.substr(strlen("cir."));
-    if (auto strAttr = mlir::dyn_cast<mlir::StringAttr>(attribute.getValue())) {
+    if (auto strAttr = mlir::dyn_cast<mlir::StringAttr>(attribute.getValue()))
       llvmFunc->addFnAttr(llvmAttrName, strAttr.getValue());
-      return mlir::success();
-    }
-
     return mlir::success();
   }
 

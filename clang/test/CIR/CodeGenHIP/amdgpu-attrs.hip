@@ -13,6 +13,11 @@
 // RUN:            -fcuda-is-device -emit-llvm %s -o %t.ogcg.ll
 // RUN: FileCheck --check-prefix=LLVM %s --input-file=%t.ogcg.ll
 
+// RUN: %clang_cc1 -triple=amdgcn-amd-amdhsa -x hip -fclangir \
+// RUN:            -fcuda-is-device -mamdgpu-expand-waitcnt-profiling \
+// RUN:            -emit-cir %s -o %t.prof.cir
+// RUN: FileCheck --check-prefix=PROF %s --input-file=%t.prof.cir
+
 // Test that AMDGPU-specific attributes are generated for HIP kernels
 
 // Test: Default attributes for simple kernel
@@ -80,3 +85,14 @@ __device__ void device_fn() {}
 // LLVM-DAG: attributes #[[VGPR_ATTR]] = {{.*}}"amdgpu-num-vgpr"="64"
 // LLVM-DAG: attributes #[[MAX_WG_ATTR]] = {{.*}}"amdgpu-max-num-workgroups"="8,4,2"
 // LLVM-DAG: attributes #[[COMBINED_ATTR]] = {{.*}}"amdgpu-flat-work-group-size"="256,256"{{.*}}"amdgpu-num-sgpr"="48"{{.*}}"amdgpu-num-vgpr"="32"{{.*}}"amdgpu-waves-per-eu"="1,2"
+
+// Test: amdgpu-expand-waitcnt-profiling is set on all functions when enabled
+// PROF: cir.func{{.*}} @_Z13kernel_simplev(){{.*}}"cir.amdgpu-expand-waitcnt-profiling"
+// PROF: cir.func{{.*}} @_Z21kernel_flat_wg_size_1v(){{.*}}"cir.amdgpu-expand-waitcnt-profiling"
+// PROF: cir.func{{.*}} @_Z19kernel_waves_per_euv(){{.*}}"cir.amdgpu-expand-waitcnt-profiling"
+// PROF: cir.func{{.*}} @_Z22kernel_waves_per_eu_mmv(){{.*}}"cir.amdgpu-expand-waitcnt-profiling"
+// PROF: cir.func{{.*}} @_Z15kernel_num_sgprv(){{.*}}"cir.amdgpu-expand-waitcnt-profiling"
+// PROF: cir.func{{.*}} @_Z15kernel_num_vgprv(){{.*}}"cir.amdgpu-expand-waitcnt-profiling"
+// PROF: cir.func{{.*}} @_Z22kernel_max_num_wgroupsv(){{.*}}"cir.amdgpu-expand-waitcnt-profiling"
+// PROF: cir.func{{.*}} @_Z15kernel_combinedv(){{.*}}"cir.amdgpu-expand-waitcnt-profiling"
+// PROF: cir.func{{.*}} @_Z9device_fnv(){{.*}}"cir.amdgpu-expand-waitcnt-profiling"

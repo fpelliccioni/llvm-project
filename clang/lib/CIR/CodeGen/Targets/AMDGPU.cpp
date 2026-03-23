@@ -42,7 +42,8 @@ static bool requiresAMDGPUProtectedVisibility(const clang::Decl *d,
 static void handleAMDGPUFlatWorkGroupSizeAttr(const clang::FunctionDecl *fd,
                                               cir::FuncOp func,
                                               CIRGenModule &cgm,
-                                              bool isOpenCLKernel) {
+                                              bool isOpenCLKernel,
+                                              bool isHIPKernel) {
   auto &builder = cgm.getBuilder();
   const auto *flatWGS = fd->getAttr<AMDGPUFlatWorkGroupSizeAttr>();
   const auto *reqdWGS =
@@ -77,10 +78,15 @@ static void handleAMDGPUFlatWorkGroupSizeAttr(const clang::FunctionDecl *fd,
     } else {
       assert(max == 0 && "Max must be zero");
     }
-  } else {
-    const unsigned defaultMax =
-        isOpenCLKernel ? 256 : cgm.getLangOpts().GPUMaxThreadsPerBlock;
-    std::string attrVal = std::string("1,") + llvm::utostr(defaultMax);
+  } else if (isOpenCLKernel || isHIPKernel) {
+    // By default, restrict the maximum size to a value specified by
+    // --gpu-max-threads-per-block=n or its default value for HIP.
+    const unsigned openCLDefaultMaxWorkGroupSize = 256;
+    const unsigned defaultMaxWorkGroupSize =
+        isOpenCLKernel ? openCLDefaultMaxWorkGroupSize
+                       : cgm.getLangOpts().GPUMaxThreadsPerBlock;
+    std::string attrVal =
+        std::string("1,") + llvm::utostr(defaultMaxWorkGroupSize);
     func->setAttr("cir.amdgpu-flat-work-group-size",
                   builder.getStringAttr(attrVal));
   }
@@ -212,45 +218,51 @@ static void handleAMDGPUIEEEAttr(cir::FuncOp func, CIRGenModule &cgm) {
   }
 }
 
+/// Handle amdgpu-expand-waitcnt-profiling attribute.
+static void handleAMDGPUExpandWaitcntProfilingAttr(cir::FuncOp func,
+                                                   CIRGenModule &cgm) {
+  if (cgm.getCodeGenOpts().AMDGPUExpandWaitcntProfiling) {
+    auto &builder = cgm.getBuilder();
+    func->setAttr("cir.amdgpu-expand-waitcnt-profiling",
+                  builder.getStringAttr(""));
+  }
+}
+
 } // anonymous namespace
 
 void clang::CIRGen::setAMDGPUTargetFunctionAttributes(const clang::Decl *decl,
                                                       cir::FuncOp func,
                                                       CIRGenModule &cgm) {
-  const auto *fd = clang::dyn_cast_or_null<clang::FunctionDecl>(decl);
-  if (!fd)
-    return;
-
-  if (func.isDeclaration())
-    return;
-
-  // Set protected visibility for AMDGPU kernels
   if (requiresAMDGPUProtectedVisibility(decl, func)) {
     func.setGlobalVisibility(cir::VisibilityKind::Protected);
     func.setDSOLocal(true);
   }
 
-  const bool isOpenCLKernel =
-      cgm.getLangOpts().OpenCL && fd->hasAttr<DeviceKernelAttr>();
-  const bool isHIPKernel =
-      cgm.getLangOpts().HIP && fd->hasAttr<CUDAGlobalAttr>();
-
-  if (!isOpenCLKernel && !isHIPKernel)
+  if (func.isDeclaration())
     return;
 
-  // Set HIP kernel calling convention
-  if (isHIPKernel) {
-    // TODO(CIR) : Add amdgpu calling conv.
-    func.setVisibility(mlir::SymbolTable::Visibility::Public);
-    func.setLinkageAttr(cir::GlobalLinkageKindAttr::get(
-        func.getContext(), cir::GlobalLinkageKind::ExternalLinkage));
-  }
+  const auto *fd = clang::dyn_cast_or_null<clang::FunctionDecl>(decl);
+  if (fd) {
+    const bool isOpenCLKernel =
+        cgm.getLangOpts().OpenCL && fd->hasAttr<DeviceKernelAttr>();
+    const bool isHIPKernel =
+        cgm.getLangOpts().HIP && fd->hasAttr<CUDAGlobalAttr>();
 
-  handleAMDGPUFlatWorkGroupSizeAttr(fd, func, cgm, isOpenCLKernel);
-  handleAMDGPUWavesPerEUAttr(fd, func, cgm);
-  handleAMDGPUNumSGPRAttr(fd, func, cgm);
-  handleAMDGPUNumVGPRAttr(fd, func, cgm);
-  handleAMDGPUMaxNumWorkGroupsAttr(fd, func, cgm);
-  handleAMDGPUClusterDimsAttr(fd, func, cgm, isOpenCLKernel);
+    if (isHIPKernel) {
+      // TODO(CIR) : Add amdgpu calling conv.
+      func.setVisibility(mlir::SymbolTable::Visibility::Public);
+      func.setLinkageAttr(cir::GlobalLinkageKindAttr::get(
+          func.getContext(), cir::GlobalLinkageKind::ExternalLinkage));
+    }
+
+    handleAMDGPUFlatWorkGroupSizeAttr(fd, func, cgm, isOpenCLKernel,
+                                      isHIPKernel);
+    handleAMDGPUWavesPerEUAttr(fd, func, cgm);
+    handleAMDGPUNumSGPRAttr(fd, func, cgm);
+    handleAMDGPUNumVGPRAttr(fd, func, cgm);
+    handleAMDGPUMaxNumWorkGroupsAttr(fd, func, cgm);
+    handleAMDGPUClusterDimsAttr(fd, func, cgm, isOpenCLKernel);
+  }
   handleAMDGPUIEEEAttr(func, cgm);
+  handleAMDGPUExpandWaitcntProfilingAttr(func, cgm);
 }
