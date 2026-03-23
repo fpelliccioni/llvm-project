@@ -1016,3 +1016,43 @@ func.func @index_castui_i0(%a: i0) -> index {
   %0 = arith.index_castui %a : i0 to index
   return %0 : index
 }
+
+// -----
+
+func.func @fptofp_same_type(%arg0 : f32) {
+  // expected-error @+1 {{are cast incompatible}}
+  %0 = arith.fptofp %arg0 : f32 to f32
+  return
+}
+
+// -----
+
+func.func @fptofp_same_type_vec(%arg0 : vector<2xf16>) {
+  // expected-error @+1 {{are cast incompatible}}
+  %0 = arith.fptofp %arg0 : vector<2xf16> to vector<2xf16>
+  return
+}
+
+// -----
+
+func.func @fptofp_shape_mismatch(%arg0 : vector<2xf16>) {
+  // expected-error @+1 {{op requires the same shape for all operands and results}}
+  %0 = arith.fptofp %arg0 : vector<2xf16> to vector<3xf32>
+  return
+}
+
+// -----
+
+func.func @fptofp_int_input(%arg0 : i32) {
+  // expected-error @+1 {{op operand #0 must be floating-point-like, but got 'i32'}}
+  %0 = arith.fptofp %arg0 : i32 to f32
+  return
+}
+
+// -----
+
+func.func @fptofp_int_output(%arg0 : f32) {
+  // expected-error @+1 {{op result #0 must be floating-point-like, but got 'i32'}}
+  %0 = arith.fptofp %arg0 : f32 to i32
+  return
+}

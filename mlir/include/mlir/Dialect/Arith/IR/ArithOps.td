@@ -1426,6 +1426,40 @@ def Arith_TruncFOp :
 }
 
 //===----------------------------------------------------------------------===//
+// FPToFPOp
+//===----------------------------------------------------------------------===//
+
+def Arith_FPToFPOp :
+    Arith_Op<"fptofp",
+      [Pure, SameOperandsAndResultShape, SameInputOutputTensorDims,
+       DeclareOpInterfaceMethods<ArithRoundingModeInterface>,
+       DeclareOpInterfaceMethods<ArithFastMathInterface>,
+       DeclareOpInterfaceMethods<CastOpInterface>]>,
+    Arguments<(ins FloatLike:$in,
+                   OptionalAttr<Arith_RoundingModeAttr>:$roundingmode,
+                   OptionalAttr<Arith_FastMathAttr>:$fastmath)>,
+    Results<(outs FloatLike:$out)> {
+  let summary = "cast between floating-point types";
+  let description = [{
+    Cast a floating-point value to a different floating-point type. Unlike
+    `arith.extf` and `arith.truncf`, this operation supports arbitrary
+    conversions between floating-point types, including conversions between
+    types of the same bitwidth but different semantics (e.g., f16 to bf16).
+
+    The source and destination element types must be different. If the value
+    cannot be exactly represented, it is rounded using the provided rounding
+    mode or the default one if no rounding mode is provided. When operating
+    on vectors, casts elementwise.
+  }];
+
+  let hasFolder = 1;
+  let hasVerifier = 1;
+  let assemblyFormat = [{ $in ($roundingmode^)?
+                          (`fastmath` `` $fastmath^)?
+                          attr-dict `:` type($in) `to` type($out) }];
+}
+
+//===----------------------------------------------------------------------===//
 // Scaling TruncFOp
 //===----------------------------------------------------------------------===//
 

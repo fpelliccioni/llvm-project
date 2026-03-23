@@ -1700,6 +1700,50 @@ LogicalResult arith::TruncFOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// FPToFPOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult arith::FPToFPOp::fold(FoldAdaptor adaptor) {
+  auto resElemType = cast<FloatType>(getElementTypeOrSelf(getType()));
+  const llvm::fltSemantics &targetSemantics = resElemType.getFloatSemantics();
+  return constFoldCastOp<FloatAttr, FloatAttr>(
+      adaptor.getOperands(), getType(),
+      [this, &targetSemantics](const APFloat &a, bool &castStatus) {
+        RoundingMode roundingMode =
+            getRoundingmode().value_or(RoundingMode::to_nearest_even);
+        llvm::RoundingMode llvmRoundingMode =
+            convertArithRoundingModeToLLVMIR(roundingMode);
+        FailureOr<APFloat> result =
+            convertFloatValue(a, targetSemantics, llvmRoundingMode);
+        if (failed(result)) {
+          castStatus = false;
+          return a;
+        }
+        return *result;
+      });
+}
+
+bool arith::FPToFPOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
+  if (!areValidCastInputsAndOutputs(inputs, outputs))
+    return false;
+  auto srcType = getTypeIfLike<FloatType>(inputs.front());
+  auto dstType = getTypeIfLike<FloatType>(outputs.front());
+  if (!srcType || !dstType)
+    return false;
+  return srcType != dstType;
+}
+
+LogicalResult arith::FPToFPOp::verify() {
+  Type srcType = getElementTypeOrSelf(getIn().getType());
+  Type dstType = getElementTypeOrSelf(getType());
+  if (srcType == dstType)
+    return emitError("result element type ")
+           << dstType << " must be different from operand element type "
+           << srcType;
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ScalingTruncFOp
 //===----------------------------------------------------------------------===//
 

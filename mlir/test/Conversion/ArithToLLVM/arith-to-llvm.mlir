@@ -838,3 +838,119 @@ func.func @supported_fp_type(%arg0: f32, %arg1: vector<4xf32>, %arg2: vector<4x8
   %3 = arith.cmpf oeq, %arg0, %arg3 : f32
   return
 }
+
+// -----
+
+// CHECK-LABEL: func @fptofp_ext(
+// CHECK-SAME: %[[ARG0:.*]]: f16, %[[ARG1:.*]]: f32)
+func.func @fptofp_ext(%arg0 : f16, %arg1 : f32) {
+// CHECK-NEXT: = llvm.fpext %[[ARG0]] : f16 to f32
+  %0 = arith.fptofp %arg0 : f16 to f32
+// CHECK-NEXT: = llvm.fpext %[[ARG0]] : f16 to f64
+  %1 = arith.fptofp %arg0 : f16 to f64
+// CHECK-NEXT: = llvm.fpext %[[ARG1]] : f32 to f64
+  %2 = arith.fptofp %arg1 : f32 to f64
+  return
+}
+
+// -----
+
+// CHECK-LABEL: func @fptofp_trunc(
+// CHECK-SAME: %[[ARG0:.*]]: f32, %[[ARG1:.*]]: f64)
+func.func @fptofp_trunc(%arg0 : f32, %arg1 : f64) {
+// CHECK-NEXT: = llvm.fptrunc %[[ARG0]] : f32 to f16
+  %0 = arith.fptofp %arg0 : f32 to f16
+// CHECK-NEXT: = llvm.fptrunc %[[ARG1]] : f64 to f16
+  %1 = arith.fptofp %arg1 : f64 to f16
+// CHECK-NEXT: = llvm.fptrunc %[[ARG1]] : f64 to f32
+  %2 = arith.fptofp %arg1 : f64 to f32
+  return
+}
+
+// -----
+
+// bf16 <-> f16: same width, different semantics. Lowered via f32.
+// CHECK-LABEL: func @fptofp_same_width(
+// CHECK-SAME: %[[ARG0:.*]]: bf16, %[[ARG1:.*]]: f16)
+func.func @fptofp_same_width(%arg0 : bf16, %arg1 : f16) {
+// CHECK-NEXT: %[[EXT0:.*]] = llvm.fpext %[[ARG0]] : bf16 to f32
+// CHECK-NEXT: = llvm.fptrunc %[[EXT0]] : f32 to f16
+  %0 = arith.fptofp %arg0 : bf16 to f16
+// CHECK-NEXT: %[[EXT1:.*]] = llvm.fpext %[[ARG1]] : f16 to f32
+// CHECK-NEXT: = llvm.fptrunc %[[EXT1]] : f32 to bf16
+  %1 = arith.fptofp %arg1 : f16 to bf16
+  return
+}
+
+// -----
+
+// CHECK-LABEL: func @fptofp_ext_vector(
+// CHECK-SAME: %[[ARG0:.*]]: vector<2xf16>, %[[ARG1:.*]]: vector<2xf32>)
+func.func @fptofp_ext_vector(%arg0 : vector<2xf16>, %arg1 : vector<2xf32>) {
+// CHECK-NEXT: = llvm.fpext %[[ARG0]] : vector<2xf16> to vector<2xf32>
+  %0 = arith.fptofp %arg0 : vector<2xf16> to vector<2xf32>
+// CHECK-NEXT: = llvm.fpext %[[ARG0]] : vector<2xf16> to vector<2xf64>
+  %1 = arith.fptofp %arg0 : vector<2xf16> to vector<2xf64>
+// CHECK-NEXT: = llvm.fpext %[[ARG1]] : vector<2xf32> to vector<2xf64>
+  %2 = arith.fptofp %arg1 : vector<2xf32> to vector<2xf64>
+  return
+}
+
+// -----
+
+// CHECK-LABEL: func @fptofp_trunc_vector(
+// CHECK-SAME: %[[ARG0:.*]]: vector<2xf32>, %[[ARG1:.*]]: vector<2xf64>)
+func.func @fptofp_trunc_vector(%arg0 : vector<2xf32>, %arg1 : vector<2xf64>) {
+// CHECK-NEXT: = llvm.fptrunc %[[ARG0]] : vector<2xf32> to vector<2xf16>
+  %0 = arith.fptofp %arg0 : vector<2xf32> to vector<2xf16>
+// CHECK-NEXT: = llvm.fptrunc %[[ARG1]] : vector<2xf64> to vector<2xf16>
+  %1 = arith.fptofp %arg1 : vector<2xf64> to vector<2xf16>
+// CHECK-NEXT: = llvm.fptrunc %[[ARG1]] : vector<2xf64> to vector<2xf32>
+  %2 = arith.fptofp %arg1 : vector<2xf64> to vector<2xf32>
+  return
+}
+
+// -----
+
+// CHECK-LABEL: func @fptofp_same_width_vector(
+// CHECK-SAME: %[[ARG0:.*]]: vector<2xbf16>, %[[ARG1:.*]]: vector<2xf16>)
+func.func @fptofp_same_width_vector(%arg0 : vector<2xbf16>, %arg1 : vector<2xf16>) {
+// CHECK-NEXT: %[[EXT0:.*]] = llvm.fpext %[[ARG0]] : vector<2xbf16> to vector<2xf32>
+// CHECK-NEXT: = llvm.fptrunc %[[EXT0]] : vector<2xf32> to vector<2xf16>
+  %0 = arith.fptofp %arg0 : vector<2xbf16> to vector<2xf16>
+// CHECK-NEXT: %[[EXT1:.*]] = llvm.fpext %[[ARG1]] : vector<2xf16> to vector<2xf32>
+// CHECK-NEXT: = llvm.fptrunc %[[EXT1]] : vector<2xf32> to vector<2xbf16>
+  %1 = arith.fptofp %arg1 : vector<2xf16> to vector<2xbf16>
+  return
+}
+
+// -----
+
+// Multi-dimensional vectors are unrolled.
+// CHECK-LABEL: @fptofp_ext_multidim_vector
+func.func @fptofp_ext_multidim_vector(%arg0 : vector<2x3xf16>) {
+// CHECK-COUNT-2: llvm.fpext %{{.*}} : vector<3xf16> to vector<3xf32>
+  %0 = arith.fptofp %arg0 : vector<2x3xf16> to vector<2x3xf32>
+  return
+}
+
+// -----
+
+// CHECK-LABEL: @fptofp_trunc_multidim_vector
+func.func @fptofp_trunc_multidim_vector(%arg0 : vector<2x3xf64>) {
+// CHECK-COUNT-2: llvm.fptrunc %{{.*}} : vector<3xf64> to vector<3xf32>
+  %0 = arith.fptofp %arg0 : vector<2x3xf64> to vector<2x3xf32>
+  return
+}
+
+// -----
+
+// CHECK-LABEL: @fptofp_same_width_multidim_vector
+func.func @fptofp_same_width_multidim_vector(%arg0 : vector<2x3xbf16>) {
+// CHECK: llvm.fpext %{{.*}} : vector<3xbf16> to vector<3xf32>
+// CHECK: llvm.fptrunc %{{.*}} : vector<3xf32> to vector<3xf16>
+// CHECK: llvm.fpext %{{.*}} : vector<3xbf16> to vector<3xf32>
+// CHECK: llvm.fptrunc %{{.*}} : vector<3xf32> to vector<3xf16>
+  %0 = arith.fptofp %arg0 : vector<2x3xbf16> to vector<2x3xf16>
+  return
+}

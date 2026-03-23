@@ -262,6 +262,75 @@ struct CmpFOpLowering : public ConvertOpToLLVMPattern<arith::CmpFOp> {
                   ConversionPatternRewriter &rewriter) const override;
 };
 
+/// Lower arith.fptofp to the appropriate LLVM op(s).
+///
+/// - If src is wider than dst: llvm.fptrunc
+/// - If src is narrower than dst: llvm.fpext
+/// - bf16 <-> f16: llvm.fpext to f32, then llvm.fptrunc to dst.
+/// - Other FP types: not supported by the LLVM dialect.
+struct FPToFPOpLowering : public ConvertOpToLLVMPattern<arith::FPToFPOp> {
+  using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(arith::FPToFPOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (LLVM::detail::opHasUnsupportedFloatingPointTypes(op,
+                                                         *getTypeConverter()))
+      return rewriter.notifyMatchFailure(op, "unsupported floating point type");
+
+    auto srcFloat = cast<FloatType>(getElementTypeOrSelf(op.getIn().getType()));
+    auto dstFloat = cast<FloatType>(getElementTypeOrSelf(op.getType()));
+
+    Type convertedType = getTypeConverter()->convertType(op.getType());
+    if (!convertedType)
+      return rewriter.notifyMatchFailure(op, "failed to convert result type");
+
+    Value input = adaptor.getIn();
+    Location loc = op.getLoc();
+    Type operandType = input.getType();
+
+    if (!isa<LLVM::LLVMArrayType>(operandType)) {
+      rewriter.replaceOp(op, emitConversion(rewriter, loc, input, convertedType,
+                                            srcFloat, dstFloat));
+      return success();
+    }
+
+    if (!isa<VectorType>(op.getType()))
+      return rewriter.notifyMatchFailure(op, "expected vector result type");
+
+    return LLVM::detail::handleMultidimensionalVectors(
+        op.getOperation(), adaptor.getOperands(), *getTypeConverter(),
+        [&](Type llvm1DVectorTy, ValueRange operands) -> Value {
+          return emitConversion(rewriter, loc, operands.front(), llvm1DVectorTy,
+                                srcFloat, dstFloat);
+        },
+        rewriter);
+  }
+
+private:
+  static Value emitConversion(ConversionPatternRewriter &rewriter, Location loc,
+                              Value input, Type targetType, FloatType srcFloat,
+                              FloatType dstFloat) {
+    unsigned srcWidth = srcFloat.getWidth();
+    unsigned dstWidth = dstFloat.getWidth();
+    if (srcWidth > dstWidth)
+      return LLVM::FPTruncOp::create(rewriter, loc, targetType, input);
+    if (srcWidth < dstWidth)
+      return LLVM::FPExtOp::create(rewriter, loc, targetType, input);
+
+    // Same width, different semantics: bf16 <-> f16
+    assert((srcFloat.isBF16() && dstFloat.isF16() ||
+            srcFloat.isF16() && dstFloat.isBF16()) &&
+           "only bf16 <-> f16 conversions are supported");
+    Type f32Scalar = Float32Type::get(rewriter.getContext());
+    Type f32Ty = f32Scalar;
+    if (auto vecTy = dyn_cast<VectorType>(targetType))
+      f32Ty = VectorType::get(vecTy.getShape(), f32Scalar);
+    Value ext = LLVM::FPExtOp::create(rewriter, loc, f32Ty, input);
+    return LLVM::FPTruncOp::create(rewriter, loc, targetType, ext);
+  }
+};
+
 struct SelectOpOneToNLowering : public ConvertOpToLLVMPattern<arith::SelectOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
   using Adaptor = ConvertOpToLLVMPattern<arith::SelectOp>::OneToNOpAdaptor;
@@ -642,6 +711,7 @@ void mlir::arith::populateArithToLLVMConversionPatterns(
     ExtFOpLowering,
     ExtSIOpLowering,
     ExtUIOpLowering,
+    FPToFPOpLowering,
     FPToSIOpLowering,
     FPToUIOpLowering,
     IndexCastOpSILowering,
