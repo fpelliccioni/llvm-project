@@ -1300,7 +1300,7 @@ KMP_LABEL(kmp_no_args):
 #endif /* KMP_ARCH_X86_64 */
 
 // '
-#if KMP_ARCH_AARCH64 || KMP_ARCH_AARCH64_32 || KMP_ARCH_ARM64EC
+#if KMP_ARCH_AARCH64 || KMP_ARCH_AARCH64_32
 
 //------------------------------------------------------------------------
 // int
