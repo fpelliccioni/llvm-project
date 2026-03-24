@@ -24754,8 +24754,9 @@ bool RISCVTargetLowering::isEligibleForTailCallOptimization(
       continue;
     if (j >= RVFI->getIncomingByValArgsSize())
       return false;
-    if (RVFI->getIncomingByValArgs(j++).getValueType() != Outs[i].ArgVT)
+    if (RVFI->getIncomingByValArgs(j).getValueType() != Outs[i].ArgVT)
       return false;
+    ++j;
   }
 
   // The callee has to preserve all registers the caller needs to preserve.
