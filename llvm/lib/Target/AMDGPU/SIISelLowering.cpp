@@ -5964,7 +5964,8 @@ static MachineBasicBlock *lowerWaveReduce(MachineInstr &MI,
     bool IsWave32 = ST.isWave32();
     unsigned MovOpcForExec = IsWave32 ? AMDGPU::S_MOV_B32 : AMDGPU::S_MOV_B64;
     unsigned ExecReg = IsWave32 ? AMDGPU::EXEC_LO : AMDGPU::EXEC;
-    if (Stratergy == WAVE_REDUCE_STRATEGY::ITERATIVE ||
+    /// TODO: Implement wave reduction for 64-bit values.
+    if (!is32BitOpc || Stratergy == WAVE_REDUCE_STRATEGY::ITERATIVE ||
         !ST.hasDPP()) { // If target doesn't support DPP operations, default to
                         // iterative stratergy
 
