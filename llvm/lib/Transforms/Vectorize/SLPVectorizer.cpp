@@ -17717,8 +17717,8 @@ InstructionCost BoUpSLP::calculateTreeCostAndTrimNonProfitable(
     // since those operate on already-materialized vectors where the cost model
     // is more accurate.
     auto IsEqualCostAltShuffleToTrim = [&]() {
-      return TotalSubtreeCost == GatherCost && TE->isAltShuffle() &&
-             TE->hasState() && Instruction::isBinaryOp(TE->getOpcode()) &&
+      return TotalSubtreeCost == GatherCost && TE->hasState() &&
+             TE->isAltShuffle() && Instruction::isBinaryOp(TE->getOpcode()) &&
              none_of(Nodes, [&](unsigned Idx) {
                return VectorizableTree[Idx]->hasState() &&
                       VectorizableTree[Idx]->getOpcode() ==
