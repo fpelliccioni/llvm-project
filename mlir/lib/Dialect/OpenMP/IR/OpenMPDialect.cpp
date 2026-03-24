@@ -3309,7 +3309,7 @@ LogicalResult TaskloopContextOp::verifyRegions() {
 //===----------------------------------------------------------------------===//
 
 void TaskloopOp::build(OpBuilder &builder, OperationState &state,
-                       const TaskloopOperands &clauses) {
+                       [[maybe_unused]] const TaskloopOperands &clauses) {
   TaskloopOp::build(builder, state);
 }
 
