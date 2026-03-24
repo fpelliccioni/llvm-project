@@ -262,16 +262,16 @@ struct CmpFOpLowering : public ConvertOpToLLVMPattern<arith::CmpFOp> {
                   ConversionPatternRewriter &rewriter) const override;
 };
 
-/// Lower arith.fptofp (same-bitwidth FP cast) to LLVM.
+/// Lower arith.convertf (same-bitwidth FP cast) to LLVM.
 ///
 /// Extends to f32 via llvm.fpext, then truncates to the target type via
 /// llvm.fptrunc. This handles bf16 <-> f16, which is the only same-bitwidth
 /// pair of LLVM-supported FP types.
-struct FPToFPOpLowering : public ConvertOpToLLVMPattern<arith::FPToFPOp> {
+struct ConvertFOpLowering : public ConvertOpToLLVMPattern<arith::ConvertFOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(arith::FPToFPOp op, OpAdaptor adaptor,
+  matchAndRewrite(arith::ConvertFOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     if (LLVM::detail::opHasUnsupportedFloatingPointTypes(op,
                                                          *getTypeConverter()))
@@ -703,7 +703,7 @@ void mlir::arith::populateArithToLLVMConversionPatterns(
     ExtFOpLowering,
     ExtSIOpLowering,
     ExtUIOpLowering,
-    FPToFPOpLowering,
+    ConvertFOpLowering,
     FPToSIOpLowering,
     FPToUIOpLowering,
     IndexCastOpSILowering,

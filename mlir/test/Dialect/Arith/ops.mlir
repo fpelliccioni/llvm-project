@@ -751,38 +751,38 @@ func.func @test_truncf_rounding_mode(%arg0 : f64) -> (f32, f32, f32, f32, f32) {
   return %0, %1, %2, %3, %4 : f32, f32, f32, f32, f32
 }
 
-// CHECK-LABEL: test_fptofp
-func.func @test_fptofp(%arg0 : f16) -> bf16 {
-  // CHECK: arith.fptofp %arg0 : f16 to bf16
-  %0 = arith.fptofp %arg0 : f16 to bf16
+// CHECK-LABEL: test_convertf
+func.func @test_convertf(%arg0 : f16) -> bf16 {
+  // CHECK: arith.convertf %arg0 : f16 to bf16
+  %0 = arith.convertf %arg0 : f16 to bf16
   return %0 : bf16
 }
 
-// CHECK-LABEL: test_fptofp_vector
-func.func @test_fptofp_vector(%arg0 : vector<8xf16>) -> vector<8xbf16> {
-  // CHECK: arith.fptofp %arg0 : vector<8xf16> to vector<8xbf16>
-  %0 = arith.fptofp %arg0 : vector<8xf16> to vector<8xbf16>
+// CHECK-LABEL: test_convertf_vector
+func.func @test_convertf_vector(%arg0 : vector<8xf16>) -> vector<8xbf16> {
+  // CHECK: arith.convertf %arg0 : vector<8xf16> to vector<8xbf16>
+  %0 = arith.convertf %arg0 : vector<8xf16> to vector<8xbf16>
   return %0 : vector<8xbf16>
 }
 
-// CHECK-LABEL: test_fptofp_scalable_vector
-func.func @test_fptofp_scalable_vector(%arg0 : vector<[8]xbf16>) -> vector<[8]xf16> {
-  // CHECK: arith.fptofp %arg0 : vector<[8]xbf16> to vector<[8]xf16>
-  %0 = arith.fptofp %arg0 : vector<[8]xbf16> to vector<[8]xf16>
+// CHECK-LABEL: test_convertf_scalable_vector
+func.func @test_convertf_scalable_vector(%arg0 : vector<[8]xbf16>) -> vector<[8]xf16> {
+  // CHECK: arith.convertf %arg0 : vector<[8]xbf16> to vector<[8]xf16>
+  %0 = arith.convertf %arg0 : vector<[8]xbf16> to vector<[8]xf16>
   return %0 : vector<[8]xf16>
 }
 
-// CHECK-LABEL: test_fptofp_tensor
-func.func @test_fptofp_tensor(%arg0 : tensor<8x8xf16>) -> tensor<8x8xbf16> {
-  // CHECK: arith.fptofp %arg0 : tensor<8x8xf16> to tensor<8x8xbf16>
-  %0 = arith.fptofp %arg0 : tensor<8x8xf16> to tensor<8x8xbf16>
+// CHECK-LABEL: test_convertf_tensor
+func.func @test_convertf_tensor(%arg0 : tensor<8x8xf16>) -> tensor<8x8xbf16> {
+  // CHECK: arith.convertf %arg0 : tensor<8x8xf16> to tensor<8x8xbf16>
+  %0 = arith.convertf %arg0 : tensor<8x8xf16> to tensor<8x8xbf16>
   return %0 : tensor<8x8xbf16>
 }
 
-// CHECK-LABEL: test_fptofp_rounding_mode
-func.func @test_fptofp_rounding_mode(%arg0 : bf16) -> f16 {
-  // CHECK: arith.fptofp %arg0 to_nearest_even : bf16 to f16
-  %0 = arith.fptofp %arg0 to_nearest_even : bf16 to f16
+// CHECK-LABEL: test_convertf_rounding_mode
+func.func @test_convertf_rounding_mode(%arg0 : bf16) -> f16 {
+  // CHECK: arith.convertf %arg0 to_nearest_even : bf16 to f16
+  %0 = arith.convertf %arg0 to_nearest_even : bf16 to f16
   return %0 : f16
 }
 

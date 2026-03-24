@@ -1426,11 +1426,11 @@ def Arith_TruncFOp :
 }
 
 //===----------------------------------------------------------------------===//
-// FPToFPOp
+// ConvertFOp
 //===----------------------------------------------------------------------===//
 
-def Arith_FPToFPOp :
-    Arith_Op<"fptofp",
+def Arith_ConvertFOp :
+    Arith_Op<"convertf",
       [Pure, SameOperandsAndResultShape, SameInputOutputTensorDims,
        DeclareOpInterfaceMethods<ArithRoundingModeInterface>,
        DeclareOpInterfaceMethods<ArithFastMathInterface>,

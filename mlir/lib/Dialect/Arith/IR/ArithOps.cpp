@@ -1700,10 +1700,10 @@ LogicalResult arith::TruncFOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// FPToFPOp
+// ConvertFOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult arith::FPToFPOp::fold(FoldAdaptor adaptor) {
+OpFoldResult arith::ConvertFOp::fold(FoldAdaptor adaptor) {
   auto resElemType = cast<FloatType>(getElementTypeOrSelf(getType()));
   const llvm::fltSemantics &targetSemantics = resElemType.getFloatSemantics();
   return constFoldCastOp<FloatAttr, FloatAttr>(
@@ -1723,7 +1723,7 @@ OpFoldResult arith::FPToFPOp::fold(FoldAdaptor adaptor) {
       });
 }
 
-bool arith::FPToFPOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
+bool arith::ConvertFOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
   if (!areValidCastInputsAndOutputs(inputs, outputs))
     return false;
   auto srcType = getTypeIfLike<FloatType>(inputs.front());
@@ -1734,7 +1734,7 @@ bool arith::FPToFPOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
          srcType.getIntOrFloatBitWidth() == dstType.getIntOrFloatBitWidth();
 }
 
-LogicalResult arith::FPToFPOp::verify() {
+LogicalResult arith::ConvertFOp::verify() {
   auto srcType = cast<FloatType>(getElementTypeOrSelf(getIn().getType()));
   auto dstType = cast<FloatType>(getElementTypeOrSelf(getType()));
   if (srcType == dstType)
