@@ -57,11 +57,18 @@ public:
 
   void setTargetAttributes(const clang::Decl *decl, mlir::Operation *global,
                            CIRGenModule &cgm) const override {
-    auto func = mlir::dyn_cast<cir::FuncOp>(global);
-    if (!func)
-      return;
-
-    setAMDGPUTargetFunctionAttributes(decl, func, cgm);
+    if (auto func = mlir::dyn_cast<cir::FuncOp>(global)) {
+      if (requiresAMDGPUProtectedVisibility(decl, func.getGlobalVisibility())) {
+        func.setGlobalVisibility(cir::VisibilityKind::Protected);
+        func.setDSOLocal(true);
+      }
+      setAMDGPUTargetFunctionAttributes(decl, func, cgm);
+    } else if (auto gv = mlir::dyn_cast<cir::GlobalOp>(global)) {
+      if (requiresAMDGPUProtectedVisibility(decl, gv.getGlobalVisibility())) {
+        gv.setGlobalVisibility(cir::VisibilityKind::Protected);
+        gv.setDSOLocal(true);
+      }
+    }
   }
 };
 

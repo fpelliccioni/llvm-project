@@ -23,28 +23,27 @@
 using namespace clang;
 using namespace clang::CIRGen;
 
-namespace {
-
-/// Check if AMDGPU protected visibility is required.
-static bool requiresAMDGPUProtectedVisibility(const clang::Decl *d,
-                                              cir::FuncOp func) {
-  if (func.getGlobalVisibility() != cir::VisibilityKind::Hidden)
+bool clang::CIRGen::requiresAMDGPUProtectedVisibility(
+    const Decl *d, cir::VisibilityKind visibility) {
+  if (visibility != cir::VisibilityKind::Hidden)
     return false;
 
-  if (d->hasAttr<OMPDeclareTargetDeclAttr>())
-    return false;
-
-  return d->hasAttr<DeviceKernelAttr>() ||
-         (clang::isa<clang::FunctionDecl>(d) && d->hasAttr<CUDAGlobalAttr>());
+  return !d->hasAttr<OMPDeclareTargetDeclAttr>() &&
+         (d->hasAttr<DeviceKernelAttr>() ||
+          (isa<FunctionDecl>(d) && d->hasAttr<CUDAGlobalAttr>()) ||
+          (isa<VarDecl>(d) &&
+           (d->hasAttr<CUDADeviceAttr>() || d->hasAttr<CUDAConstantAttr>() ||
+            cast<VarDecl>(d)->getType()->isCUDADeviceBuiltinSurfaceType() ||
+            cast<VarDecl>(d)->getType()->isCUDADeviceBuiltinTextureType())));
 }
 
+namespace {
+
 /// Handle amdgpu-flat-work-group-size attribute.
-static void handleAMDGPUFlatWorkGroupSizeAttr(const clang::FunctionDecl *fd,
-                                              cir::FuncOp func,
-                                              CIRGenModule &cgm,
-                                              bool isOpenCLKernel,
-                                              bool isHIPKernel) {
-  auto &builder = cgm.getBuilder();
+static void
+handleAMDGPUFlatWorkGroupSizeAttr(const FunctionDecl *fd, cir::FuncOp func,
+                                  CIRGenModule &cgm, CIRGenBuilderTy &builder,
+                                  bool isOpenCLKernel, bool isHIPKernel) {
   const auto *flatWGS = fd->getAttr<AMDGPUFlatWorkGroupSizeAttr>();
   const auto *reqdWGS =
       cgm.getLangOpts().OpenCL ? fd->getAttr<ReqdWorkGroupSizeAttr>() : nullptr;
@@ -93,13 +92,12 @@ static void handleAMDGPUFlatWorkGroupSizeAttr(const clang::FunctionDecl *fd,
 }
 
 /// Handle amdgpu-waves-per-eu attribute.
-static void handleAMDGPUWavesPerEUAttr(const clang::FunctionDecl *fd,
-                                       cir::FuncOp func, CIRGenModule &cgm) {
+static void handleAMDGPUWavesPerEUAttr(const FunctionDecl *fd, cir::FuncOp func,
+                                       CIRGenModule &cgm,
+                                       CIRGenBuilderTy &builder) {
   const auto *attr = fd->getAttr<AMDGPUWavesPerEUAttr>();
   if (!attr)
     return;
-
-  auto &builder = cgm.getBuilder();
   unsigned min =
       attr->getMin()->EvaluateKnownConstInt(cgm.getASTContext()).getExtValue();
   unsigned max = attr->getMax()
@@ -120,44 +118,43 @@ static void handleAMDGPUWavesPerEUAttr(const clang::FunctionDecl *fd,
 }
 
 /// Handle amdgpu-num-sgpr attribute.
-static void handleAMDGPUNumSGPRAttr(const clang::FunctionDecl *fd,
-                                    cir::FuncOp func, CIRGenModule &cgm) {
+static void handleAMDGPUNumSGPRAttr(const FunctionDecl *fd, cir::FuncOp func,
+                                    CIRGenModule &cgm,
+                                    CIRGenBuilderTy &builder) {
   const auto *attr = fd->getAttr<AMDGPUNumSGPRAttr>();
   if (!attr)
     return;
 
   uint32_t numSGPR = attr->getNumSGPR();
   if (numSGPR != 0) {
-    auto &builder = cgm.getBuilder();
     func->setAttr("cir.amdgpu-num-sgpr",
                   builder.getStringAttr(llvm::utostr(numSGPR)));
   }
 }
 
 /// Handle amdgpu-num-vgpr attribute.
-static void handleAMDGPUNumVGPRAttr(const clang::FunctionDecl *fd,
-                                    cir::FuncOp func, CIRGenModule &cgm) {
+static void handleAMDGPUNumVGPRAttr(const FunctionDecl *fd, cir::FuncOp func,
+                                    CIRGenModule &cgm,
+                                    CIRGenBuilderTy &builder) {
   const auto *attr = fd->getAttr<AMDGPUNumVGPRAttr>();
   if (!attr)
     return;
 
   uint32_t numVGPR = attr->getNumVGPR();
   if (numVGPR != 0) {
-    auto &builder = cgm.getBuilder();
     func->setAttr("cir.amdgpu-num-vgpr",
                   builder.getStringAttr(llvm::utostr(numVGPR)));
   }
 }
 
 /// Handle amdgpu-max-num-workgroups attribute.
-static void handleAMDGPUMaxNumWorkGroupsAttr(const clang::FunctionDecl *fd,
+static void handleAMDGPUMaxNumWorkGroupsAttr(const FunctionDecl *fd,
                                              cir::FuncOp func,
-                                             CIRGenModule &cgm) {
+                                             CIRGenModule &cgm,
+                                             CIRGenBuilderTy &builder) {
   const auto *attr = fd->getAttr<AMDGPUMaxNumWorkGroupsAttr>();
   if (!attr)
     return;
-
-  auto &builder = cgm.getBuilder();
   uint32_t x = attr->getMaxNumWorkGroupsX()
                    ->EvaluateKnownConstInt(cgm.getASTContext())
                    .getExtValue();
@@ -180,10 +177,10 @@ static void handleAMDGPUMaxNumWorkGroupsAttr(const clang::FunctionDecl *fd,
 }
 
 /// Handle amdgpu-cluster-dims attribute.
-static void handleAMDGPUClusterDimsAttr(const clang::FunctionDecl *fd,
+static void handleAMDGPUClusterDimsAttr(const FunctionDecl *fd,
                                         cir::FuncOp func, CIRGenModule &cgm,
+                                        CIRGenBuilderTy &builder,
                                         bool isOpenCLKernel) {
-  auto &builder = cgm.getBuilder();
 
   if (const auto *attr = fd->getAttr<CUDAClusterDimsAttr>()) {
     auto getExprVal = [&](const Expr *e) {
@@ -201,7 +198,7 @@ static void handleAMDGPUClusterDimsAttr(const clang::FunctionDecl *fd,
                   builder.getStringAttr(attrVal.str()));
   }
 
-  const clang::TargetInfo &targetInfo = cgm.getASTContext().getTargetInfo();
+  const TargetInfo &targetInfo = cgm.getASTContext().getTargetInfo();
   if ((isOpenCLKernel &&
        targetInfo.hasFeatureEnabled(targetInfo.getTargetOpts().FeatureMap,
                                     "clusters")) ||
@@ -211,58 +208,48 @@ static void handleAMDGPUClusterDimsAttr(const clang::FunctionDecl *fd,
 }
 
 /// Handle amdgpu-ieee attribute.
-static void handleAMDGPUIEEEAttr(cir::FuncOp func, CIRGenModule &cgm) {
-  if (!cgm.getCodeGenOpts().EmitIEEENaNCompliantInsts) {
-    auto &builder = cgm.getBuilder();
+static void handleAMDGPUIEEEAttr(cir::FuncOp func, CIRGenModule &cgm,
+                                 CIRGenBuilderTy &builder) {
+  if (!cgm.getCodeGenOpts().EmitIEEENaNCompliantInsts)
     func->setAttr("cir.amdgpu-ieee", builder.getStringAttr("false"));
-  }
 }
 
 /// Handle amdgpu-expand-waitcnt-profiling attribute.
 static void handleAMDGPUExpandWaitcntProfilingAttr(cir::FuncOp func,
-                                                   CIRGenModule &cgm) {
-  if (cgm.getCodeGenOpts().AMDGPUExpandWaitcntProfiling) {
-    auto &builder = cgm.getBuilder();
+                                                   CIRGenModule &cgm,
+                                                   CIRGenBuilderTy &builder) {
+  if (cgm.getCodeGenOpts().AMDGPUExpandWaitcntProfiling)
     func->setAttr("cir.amdgpu-expand-waitcnt-profiling",
                   builder.getStringAttr(""));
-  }
 }
 
-} // anonymous namespace
+} // namespace
 
-void clang::CIRGen::setAMDGPUTargetFunctionAttributes(const clang::Decl *decl,
+void clang::CIRGen::setAMDGPUTargetFunctionAttributes(const Decl *decl,
                                                       cir::FuncOp func,
                                                       CIRGenModule &cgm) {
-  if (requiresAMDGPUProtectedVisibility(decl, func)) {
-    func.setGlobalVisibility(cir::VisibilityKind::Protected);
-    func.setDSOLocal(true);
-  }
-
   if (func.isDeclaration())
     return;
 
-  const auto *fd = clang::dyn_cast_or_null<clang::FunctionDecl>(decl);
+  CIRGenBuilderTy &builder = cgm.getBuilder();
+
+  const auto *fd = dyn_cast_or_null<FunctionDecl>(decl);
   if (fd) {
     const bool isOpenCLKernel =
         cgm.getLangOpts().OpenCL && fd->hasAttr<DeviceKernelAttr>();
     const bool isHIPKernel =
         cgm.getLangOpts().HIP && fd->hasAttr<CUDAGlobalAttr>();
 
-    if (isHIPKernel) {
-      // TODO(CIR) : Add amdgpu calling conv.
-      func.setVisibility(mlir::SymbolTable::Visibility::Public);
-      func.setLinkageAttr(cir::GlobalLinkageKindAttr::get(
-          func.getContext(), cir::GlobalLinkageKind::ExternalLinkage));
-    }
+    // TODO(CIR): Set amdgpu_kernel calling convention for HIP kernels.
 
-    handleAMDGPUFlatWorkGroupSizeAttr(fd, func, cgm, isOpenCLKernel,
+    handleAMDGPUFlatWorkGroupSizeAttr(fd, func, cgm, builder, isOpenCLKernel,
                                       isHIPKernel);
-    handleAMDGPUWavesPerEUAttr(fd, func, cgm);
-    handleAMDGPUNumSGPRAttr(fd, func, cgm);
-    handleAMDGPUNumVGPRAttr(fd, func, cgm);
-    handleAMDGPUMaxNumWorkGroupsAttr(fd, func, cgm);
-    handleAMDGPUClusterDimsAttr(fd, func, cgm, isOpenCLKernel);
+    handleAMDGPUWavesPerEUAttr(fd, func, cgm, builder);
+    handleAMDGPUNumSGPRAttr(fd, func, cgm, builder);
+    handleAMDGPUNumVGPRAttr(fd, func, cgm, builder);
+    handleAMDGPUMaxNumWorkGroupsAttr(fd, func, cgm, builder);
+    handleAMDGPUClusterDimsAttr(fd, func, cgm, builder, isOpenCLKernel);
   }
-  handleAMDGPUIEEEAttr(func, cgm);
-  handleAMDGPUExpandWaitcntProfilingAttr(func, cgm);
+  handleAMDGPUIEEEAttr(func, cgm, builder);
+  handleAMDGPUExpandWaitcntProfilingAttr(func, cgm, builder);
 }
