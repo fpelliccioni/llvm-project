@@ -1421,9 +1421,9 @@ public:
     auto *ExpandingOp = dyn_cast<Instruction>(V);
     if (!ExpandingOp)
       return false;
-    auto CheckForTransformedOpcode = [](const Instruction *MainOp,
+    auto CheckForTransformedOpcode = [](const Instruction *RefOp,
                                         const Instruction *ExpandingOp) {
-      switch (MainOp->getOpcode()) {
+      switch (RefOp->getOpcode()) {
       case Instruction::Add:
         switch (ExpandingOp->getOpcode()) {
         case Instruction::Shl:
@@ -23756,7 +23756,7 @@ void BoUpSLP::BlockScheduling::calculateDependencies(
             if (ScheduleData *UseSD = getScheduleData(In)) {
               unsigned ExtraDeps = 1;
               // Increment twice, since the operand was expanded in binop.
-              if (EI.UserTE && EI.UserTE->isExpandedBinOp(In))
+              if (EI.UserTE->isExpandedBinOp(In))
                 ExtraDeps = 2;
               for_each(seq(ExtraDeps),
                        [&](unsigned) { CD->incDependencies(); });
@@ -26361,6 +26361,8 @@ private:
             ReducedVals.erase(std::next(ReducedVals.begin(), ShlIdx));
           else
             ReducedVals[ShlIdx].swap(Remaining);
+          // Clear UsedReductionOpIds since it is not valid anymore.
+          UsedReductionOpIds.clear();
         }
       }
     }
