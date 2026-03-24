@@ -1741,9 +1741,9 @@ void LoweringPreparePass::buildCUDAModuleCtor() {
   auto fatbinType =
       ArrayType::get(&getContext(), charTy, gpuBinary->getBuffer().size());
   std::string fatbinStrName = addUnderscoredPrefix(cudaPrefix, "_fatbin_str");
-  GlobalOp fatbinStr =
-      GlobalOp::create(builder, loc, fatbinStrName, fatbinType,
-                       /*isConstant=*/true, GlobalLinkageKind::PrivateLinkage);
+  GlobalOp fatbinStr = GlobalOp::create(builder, loc, fatbinStrName, fatbinType,
+                                        /*isConstant=*/true, {},
+                                        GlobalLinkageKind::PrivateLinkage);
   fatbinStr.setAlignment(8);
   fatbinStr.setInitialValueAttr(cir::ConstArrayAttr::get(
       fatbinType, builder.getStringAttr(gpuBinary->getBuffer())));
@@ -1757,9 +1757,9 @@ void LoweringPreparePass::buildCUDAModuleCtor() {
       /*packed=*/false, /*padded=*/false, RecordType::RecordKind::Struct);
   std::string fatbinWrapperName =
       addUnderscoredPrefix(cudaPrefix, "_fatbin_wrapper");
-  GlobalOp fatbinWrapper =
-      GlobalOp::create(builder, loc, fatbinWrapperName, fatbinWrapperType,
-                       /*isConstant=*/true, GlobalLinkageKind::PrivateLinkage);
+  GlobalOp fatbinWrapper = GlobalOp::create(
+      builder, loc, fatbinWrapperName, fatbinWrapperType,
+      /*isConstant=*/true, {}, GlobalLinkageKind::PrivateLinkage);
 
   constexpr unsigned cudaFatMagic = 0x466243b1;
   constexpr unsigned hipFatMagic = 0x48495046;
@@ -1779,9 +1779,10 @@ void LoweringPreparePass::buildCUDAModuleCtor() {
   // Create the GPU binary handle global variable.
   std::string gpubinHandleName =
       addUnderscoredPrefix(cudaPrefix, "_gpubin_handle");
+
   GlobalOp gpuBinHandle = GlobalOp::create(
       builder, loc, gpubinHandleName, voidPtrPtrTy,
-      /*isConstant=*/false, GlobalLinkageKind::InternalLinkage);
+      /*isConstant=*/false, {}, cir::GlobalLinkageKind::InternalLinkage);
   gpuBinHandle.setInitialValueAttr(builder.getConstNullPtrAttr(voidPtrPtrTy));
   gpuBinHandle.setPrivate();
 
