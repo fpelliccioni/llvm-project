@@ -262,11 +262,11 @@ struct CmpFOpLowering : public ConvertOpToLLVMPattern<arith::CmpFOp> {
                   ConversionPatternRewriter &rewriter) const override;
 };
 
-/// Lower arith.fptofp to the appropriate arith/LLVM op(s).
+/// Lower arith.fptofp (same-bitwidth FP cast) to LLVM.
 ///
-/// - If src is wider than dst: arith.truncf (recursively lowered)
-/// - If src is narrower than dst: arith.extf (recursively lowered)
-/// - bf16 <-> f16: llvm.fpext to f32, then llvm.fptrunc to dst.
+/// Extends to f32 via llvm.fpext, then truncates to the target type via
+/// llvm.fptrunc. This handles bf16 <-> f16, which is the only same-bitwidth
+/// pair of LLVM-supported FP types.
 struct FPToFPOpLowering : public ConvertOpToLLVMPattern<arith::FPToFPOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
@@ -276,29 +276,15 @@ struct FPToFPOpLowering : public ConvertOpToLLVMPattern<arith::FPToFPOp> {
     if (LLVM::detail::opHasUnsupportedFloatingPointTypes(op,
                                                          *getTypeConverter()))
       return rewriter.notifyMatchFailure(op, "unsupported floating point type");
-    auto srcFloat = cast<FloatType>(getElementTypeOrSelf(op.getIn().getType()));
-    auto dstFloat = cast<FloatType>(getElementTypeOrSelf(op.getType()));
-    unsigned srcWidth = srcFloat.getWidth();
-    unsigned dstWidth = dstFloat.getWidth();
 
-    if (srcWidth > dstWidth) {
-      rewriter.replaceOpWithNewOp<arith::TruncFOp>(op, op.getType(), op.getIn(),
-                                                   op.getRoundingmodeAttr(),
-                                                   op.getFastmathAttr());
-      return success();
-    }
-    if (srcWidth < dstWidth) {
-      rewriter.replaceOpWithNewOp<arith::ExtFOp>(op, op.getType(), op.getIn(),
-                                                 op.getFastmathAttr());
-      return success();
-    }
-
-    // Same width, different semantic: lower directly to LLVM. Only bf16 <-> f16
-    // conversions are supported. There is currently no other pair of FP types
-    // that are valid LLVM types.
-    assert((srcFloat.isBF16() && dstFloat.isF16()) ||
-           (srcFloat.isF16() && dstFloat.isBF16()) &&
+    // Only bf16 <-> f16 conversions are supported. There is currently no other
+    // pair of FP types that are valid LLVM types.
+    auto srcType = getElementTypeOrSelf(op.getIn().getType());
+    auto dstType = getElementTypeOrSelf(op.getType());
+    assert((srcType.isBF16() && dstType.isF16()) ||
+           (srcType.isF16() && dstType.isBF16()) &&
                "only bf16 <-> f16 conversions are supported");
+
     Type convertedType = getTypeConverter()->convertType(op.getType());
     if (!convertedType)
       return rewriter.notifyMatchFailure(op, "failed to convert result type");
@@ -307,8 +293,8 @@ struct FPToFPOpLowering : public ConvertOpToLLVMPattern<arith::FPToFPOp> {
     Location loc = op.getLoc();
 
     if (!isa<LLVM::LLVMArrayType>(input.getType())) {
-      rewriter.replaceOp(
-          op, emitSameWidthConversion(rewriter, loc, input, convertedType));
+      rewriter.replaceOp(op,
+                         emitConversion(rewriter, loc, input, convertedType));
       return success();
     }
 
@@ -318,20 +304,20 @@ struct FPToFPOpLowering : public ConvertOpToLLVMPattern<arith::FPToFPOp> {
     return LLVM::detail::handleMultidimensionalVectors(
         op.getOperation(), adaptor.getOperands(), *getTypeConverter(),
         [&](Type llvm1DVectorTy, ValueRange operands) -> Value {
-          return emitSameWidthConversion(rewriter, loc, operands.front(),
-                                         llvm1DVectorTy);
+          return emitConversion(rewriter, loc, operands.front(),
+                                llvm1DVectorTy);
         },
         rewriter);
   }
 
 private:
-  static Value emitSameWidthConversion(ConversionPatternRewriter &rewriter,
-                                       Location loc, Value input,
-                                       Type targetType) {
+  static Value emitConversion(ConversionPatternRewriter &rewriter, Location loc,
+                              Value input, Type targetType) {
     Type f32Scalar = Float32Type::get(rewriter.getContext());
     Type f32Ty = f32Scalar;
     if (auto vecTy = dyn_cast<VectorType>(targetType))
       f32Ty = VectorType::get(vecTy.getShape(), f32Scalar);
+
     Value ext = LLVM::FPExtOp::create(rewriter, loc, f32Ty, input);
     return LLVM::FPTruncOp::create(rewriter, loc, targetType, ext);
   }

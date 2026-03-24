@@ -535,6 +535,54 @@ func.func @fptrunc_vec_f32_to_i32(%arg0 : vector<2xf32>) {
 
 // -----
 
+func.func @fptofp_same_type(%arg0 : f16) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = arith.fptofp %arg0 : f16 to f16
+  return
+}
+
+// -----
+
+func.func @fptofp_different_bitwidth(%arg0 : f16) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = arith.fptofp %arg0 : f16 to f32
+  return
+}
+
+// -----
+
+func.func @fptofp_different_bitwidth_trunc(%arg0 : f32) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = arith.fptofp %arg0 : f32 to f16
+  return
+}
+
+// -----
+
+func.func @fptofp_vec_same_type(%arg0 : vector<2xf16>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = arith.fptofp %arg0 : vector<2xf16> to vector<2xf16>
+  return
+}
+
+// -----
+
+func.func @fptofp_vec_different_bitwidth(%arg0 : vector<2xf16>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = arith.fptofp %arg0 : vector<2xf16> to vector<2xf32>
+  return
+}
+
+// -----
+
+func.func @fptofp_shape_mismatch(%arg0 : vector<2xf16>) {
+  // expected-error@+1 {{op requires the same shape for all operands and results}}
+  %0 = arith.fptofp %arg0 : vector<2xf16> to vector<3xbf16>
+  return
+}
+
+// -----
+
 func.func @sexti_index_as_operand(%arg0 : index) {
   // expected-error@+1 {{op operand #0 must be signless-fixed-width-integer-like, but got 'index'}}
   %0 = arith.extsi %arg0 : index to i128

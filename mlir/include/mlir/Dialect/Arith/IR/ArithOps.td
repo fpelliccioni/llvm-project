@@ -1439,17 +1439,17 @@ def Arith_FPToFPOp :
                    OptionalAttr<Arith_RoundingModeAttr>:$roundingmode,
                    OptionalAttr<Arith_FastMathAttr>:$fastmath)>,
     Results<(outs FloatLike:$out)> {
-  let summary = "cast between floating-point types";
+  let summary = "cast between floating-point types of the same bitwidth";
   let description = [{
-    Cast a floating-point value to a different floating-point type. Unlike
-    `arith.extf` and `arith.truncf`, this operation supports arbitrary
-    conversions between floating-point types, including conversions between
-    types of the same bitwidth but different semantics (e.g., f16 to bf16).
+    Cast a floating-point value to a different floating-point type of the same
+    bitwidth. This operation handles conversions between types that have the
+    same bitwidth but different semantics (e.g., f16 to bf16), which cannot
+    be represented by `arith.extf` or `arith.truncf`.
 
-    The source and destination element types must be different. If the value
-    cannot be exactly represented, it is rounded using the provided rounding
-    mode or the default one if no rounding mode is provided. When operating
-    on vectors, casts elementwise.
+    The source and destination element types must be different and must have
+    the same bitwidth. If the value cannot be exactly represented, it is
+    rounded using the provided rounding mode or the default one if no rounding
+    mode is provided. When operating on vectors, casts elementwise.
   }];
 
   let hasFolder = 1;

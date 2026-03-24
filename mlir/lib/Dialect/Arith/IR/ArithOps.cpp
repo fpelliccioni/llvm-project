@@ -1730,15 +1730,20 @@ bool arith::FPToFPOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
   auto dstType = getTypeIfLike<FloatType>(outputs.front());
   if (!srcType || !dstType)
     return false;
-  return srcType != dstType;
+  return srcType != dstType &&
+         srcType.getIntOrFloatBitWidth() == dstType.getIntOrFloatBitWidth();
 }
 
 LogicalResult arith::FPToFPOp::verify() {
-  Type srcType = getElementTypeOrSelf(getIn().getType());
-  Type dstType = getElementTypeOrSelf(getType());
+  auto srcType = cast<FloatType>(getElementTypeOrSelf(getIn().getType()));
+  auto dstType = cast<FloatType>(getElementTypeOrSelf(getType()));
   if (srcType == dstType)
     return emitError("result element type ")
            << dstType << " must be different from operand element type "
+           << srcType;
+  if (srcType.getWidth() != dstType.getWidth())
+    return emitError("result element type ")
+           << dstType << " must have the same bitwidth as operand element type "
            << srcType;
   return success();
 }

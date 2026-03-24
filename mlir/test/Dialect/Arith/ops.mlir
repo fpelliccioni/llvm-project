@@ -751,6 +751,41 @@ func.func @test_truncf_rounding_mode(%arg0 : f64) -> (f32, f32, f32, f32, f32) {
   return %0, %1, %2, %3, %4 : f32, f32, f32, f32, f32
 }
 
+// CHECK-LABEL: test_fptofp
+func.func @test_fptofp(%arg0 : f16) -> bf16 {
+  // CHECK: arith.fptofp %arg0 : f16 to bf16
+  %0 = arith.fptofp %arg0 : f16 to bf16
+  return %0 : bf16
+}
+
+// CHECK-LABEL: test_fptofp_vector
+func.func @test_fptofp_vector(%arg0 : vector<8xf16>) -> vector<8xbf16> {
+  // CHECK: arith.fptofp %arg0 : vector<8xf16> to vector<8xbf16>
+  %0 = arith.fptofp %arg0 : vector<8xf16> to vector<8xbf16>
+  return %0 : vector<8xbf16>
+}
+
+// CHECK-LABEL: test_fptofp_scalable_vector
+func.func @test_fptofp_scalable_vector(%arg0 : vector<[8]xbf16>) -> vector<[8]xf16> {
+  // CHECK: arith.fptofp %arg0 : vector<[8]xbf16> to vector<[8]xf16>
+  %0 = arith.fptofp %arg0 : vector<[8]xbf16> to vector<[8]xf16>
+  return %0 : vector<[8]xf16>
+}
+
+// CHECK-LABEL: test_fptofp_tensor
+func.func @test_fptofp_tensor(%arg0 : tensor<8x8xf16>) -> tensor<8x8xbf16> {
+  // CHECK: arith.fptofp %arg0 : tensor<8x8xf16> to tensor<8x8xbf16>
+  %0 = arith.fptofp %arg0 : tensor<8x8xf16> to tensor<8x8xbf16>
+  return %0 : tensor<8x8xbf16>
+}
+
+// CHECK-LABEL: test_fptofp_rounding_mode
+func.func @test_fptofp_rounding_mode(%arg0 : bf16) -> f16 {
+  // CHECK: arith.fptofp %arg0 to_nearest_even : bf16 to f16
+  %0 = arith.fptofp %arg0 to_nearest_even : bf16 to f16
+  return %0 : f16
+}
+
 // CHECK-LABEL: test_uitofp
 func.func @test_uitofp(%arg0 : i32) -> f32 {
   %0 = arith.uitofp %arg0 : i32 to f32
@@ -1229,82 +1264,3 @@ func.func @intflags_func(%arg0: i64, %arg1: i64) {
   return
 }
 
-// CHECK-LABEL: func @test_fptofp(
-// CHECK-SAME: %[[ARG0:.*]]: f16
-func.func @test_fptofp(%arg0 : f16) -> f32 {
-  // CHECK: arith.fptofp %[[ARG0]] : f16 to f32
-  %0 = arith.fptofp %arg0 : f16 to f32
-  return %0 : f32
-}
-
-// CHECK-LABEL: func @test_fptofp_bf16_to_f16(
-// CHECK-SAME: %[[ARG0:.*]]: bf16
-func.func @test_fptofp_bf16_to_f16(%arg0 : bf16) -> f16 {
-  // CHECK: arith.fptofp %[[ARG0]] : bf16 to f16
-  %0 = arith.fptofp %arg0 : bf16 to f16
-  return %0 : f16
-}
-
-// CHECK-LABEL: func @test_fptofp_vector(
-// CHECK-SAME: %[[ARG0:.*]]: vector<8xf16>
-func.func @test_fptofp_vector(%arg0 : vector<8xf16>) -> vector<8xf32> {
-  // CHECK: arith.fptofp %[[ARG0]] : vector<8xf16> to vector<8xf32>
-  %0 = arith.fptofp %arg0 : vector<8xf16> to vector<8xf32>
-  return %0 : vector<8xf32>
-}
-
-// CHECK-LABEL: func @test_fptofp_scalable_vector(
-// CHECK-SAME: %[[ARG0:.*]]: vector<[8]xf16>
-func.func @test_fptofp_scalable_vector(%arg0 : vector<[8]xf16>) -> vector<[8]xf32> {
-  // CHECK: arith.fptofp %[[ARG0]] : vector<[8]xf16> to vector<[8]xf32>
-  %0 = arith.fptofp %arg0 : vector<[8]xf16> to vector<[8]xf32>
-  return %0 : vector<[8]xf32>
-}
-
-// CHECK-LABEL: func @test_fptofp_tensor(
-// CHECK-SAME: %[[ARG0:.*]]: tensor<8x8xf32>
-func.func @test_fptofp_tensor(%arg0 : tensor<8x8xf32>) -> tensor<8x8xf64> {
-  // CHECK: arith.fptofp %[[ARG0]] : tensor<8x8xf32> to tensor<8x8xf64>
-  %0 = arith.fptofp %arg0 : tensor<8x8xf32> to tensor<8x8xf64>
-  return %0 : tensor<8x8xf64>
-}
-
-// CHECK-LABEL: func @test_fptofp_tensor_encoding(
-// CHECK-SAME: %[[ARG0:.*]]: tensor<8x8xf32, "foo">
-func.func @test_fptofp_tensor_encoding(%arg0 : tensor<8x8xf32, "foo">) -> tensor<8x8xf64, "foo"> {
-  // CHECK: arith.fptofp %[[ARG0]] : tensor<8x8xf32, "foo"> to tensor<8x8xf64, "foo">
-  %0 = arith.fptofp %arg0 : tensor<8x8xf32, "foo"> to tensor<8x8xf64, "foo">
-  return %0 : tensor<8x8xf64, "foo">
-}
-
-// CHECK-LABEL: func @test_fptofp_rounding_mode(
-// CHECK-SAME: %[[ARG0:.*]]: f64
-func.func @test_fptofp_rounding_mode(%arg0 : f64) -> (f32, f32, f32, f32, f32) {
-  // CHECK: arith.fptofp %[[ARG0]] to_nearest_even : f64 to f32
-  %0 = arith.fptofp %arg0 to_nearest_even : f64 to f32
-  // CHECK: arith.fptofp %[[ARG0]] downward : f64 to f32
-  %1 = arith.fptofp %arg0 downward : f64 to f32
-  // CHECK: arith.fptofp %[[ARG0]] upward : f64 to f32
-  %2 = arith.fptofp %arg0 upward : f64 to f32
-  // CHECK: arith.fptofp %[[ARG0]] toward_zero : f64 to f32
-  %3 = arith.fptofp %arg0 toward_zero : f64 to f32
-  // CHECK: arith.fptofp %[[ARG0]] to_nearest_away : f64 to f32
-  %4 = arith.fptofp %arg0 to_nearest_away : f64 to f32
-  return %0, %1, %2, %3, %4 : f32, f32, f32, f32, f32
-}
-
-// CHECK-LABEL: func @test_fptofp_fastmath(
-// CHECK-SAME: %[[ARG0:.*]]: f32
-func.func @test_fptofp_fastmath(%arg0 : f32) -> f64 {
-  // CHECK: arith.fptofp %[[ARG0]] fastmath<nnan> : f32 to f64
-  %0 = arith.fptofp %arg0 fastmath<nnan> : f32 to f64
-  return %0 : f64
-}
-
-// CHECK-LABEL: func @test_fptofp_rounding_mode_and_fastmath(
-// CHECK-SAME: %[[ARG0:.*]]: f64
-func.func @test_fptofp_rounding_mode_and_fastmath(%arg0 : f64) -> f32 {
-  // CHECK: arith.fptofp %[[ARG0]] to_nearest_even fastmath<nnan> : f64 to f32
-  %0 = arith.fptofp %arg0 to_nearest_even fastmath<nnan> : f64 to f32
-  return %0 : f32
-}
