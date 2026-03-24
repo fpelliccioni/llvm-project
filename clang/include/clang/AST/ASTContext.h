@@ -389,9 +389,8 @@ class ASTContext : public RefCountedBase<ASTContext> {
   mutable llvm::DenseMap<const CXXDestructorDecl *, FunctionDecl *>
       GlobalArrayOperatorDeletesForVirtualDtor;
 
-  /// To remember for which types we met new[] call, these potentially require a
-  /// vector deleting dtor.
-  llvm::DenseSet<const CXXRecordDecl *> MaybeRequireVectorDeletingDtor;
+  /// To remember which types did require a vector deleting dtor.
+  llvm::DenseSet<const CXXRecordDecl *> RequireVectorDeletingDtor;
 
   /// The next string literal "version" to allocate during constant evaluation.
   /// This is used to distinguish between repeated evaluations of the same
@@ -3549,8 +3548,8 @@ public:
                                           OperatorDeleteKind K) const;
   bool dtorHasOperatorDelete(const CXXDestructorDecl *Dtor,
                              OperatorDeleteKind K) const;
-  void setClassMaybeNeedsVectorDeletingDestructor(const CXXRecordDecl *RD);
-  bool classMaybeNeedsVectorDeletingDestructor(const CXXRecordDecl *RD);
+  void setClassNeedsVectorDeletingDestructor(const CXXRecordDecl *RD);
+  bool classNeedsVectorDeletingDestructor(const CXXRecordDecl *RD);
 
   /// Retrieve the context for computing mangling numbers in the given
   /// DeclContext.
