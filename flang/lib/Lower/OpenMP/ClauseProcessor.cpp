@@ -1491,17 +1491,12 @@ bool ClauseProcessor::processIsDevicePtr(
 bool ClauseProcessor::processLinear(mlir::omp::LinearClauseOps &result,
                                     bool isDeclareSimd) const {
   lower::StatementContext stmtCtx;
+  std::vector<mlir::Attribute> typeAttrs;
+  std::vector<mlir::Attribute> linearModAttrs;
   return findRepeatableClause<
       omp::clause::Linear>([&](const omp::clause::Linear &clause,
                                const parser::CharBlock &) {
     auto &objects = std::get<omp::ObjectList>(clause.t);
-    static std::vector<mlir::Attribute> typeAttrs;
-    static std::vector<mlir::Attribute> linearModAttrs;
-
-    if (!result.linearVars.size()) {
-      typeAttrs.clear();
-      linearModAttrs.clear();
-    }
 
     std::optional<mlir::omp::LinearModifier> explicitLinearMod;
     if (auto &linearModifier =
