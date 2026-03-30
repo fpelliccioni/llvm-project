@@ -89,6 +89,17 @@ constexpr int test()
       assert(!opt);
     }
 #endif
+    // LWG3424: return type is remove_cv_t<T>
+    {
+      optional<const int> opt(2);
+      ASSERT_SAME_TYPE(decltype(opt.value_or(3)), int);
+      assert(opt.value_or(3) == 2);
+    }
+    {
+      optional<const int> opt;
+      ASSERT_SAME_TYPE(decltype(std::move(opt).value_or(3)), int);
+      assert(std::move(opt).value_or(3) == 3);
+    }
     return 0;
 }
 

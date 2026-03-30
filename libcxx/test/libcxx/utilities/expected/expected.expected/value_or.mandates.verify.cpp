@@ -10,11 +10,11 @@
 // ADDITIONAL_COMPILE_FLAGS: -Xclang -verify-ignore-unexpected=error
 
 // Test the mandates
-// template<class U> constexpr T value_or(U&& v) const &;
-// Mandates: is_copy_constructible_v<T> is true and is_convertible_v<U, T> is true.
+// template<class U> constexpr remove_cv_t<T> value_or(U&& v) const &;
+// Mandates: is_convertible_v<const T&, remove_cv_t<T>> is true and is_convertible_v<U, remove_cv_t<T>> is true.
 
-// template<class U> constexpr T value_or(U&& v) &&;
-// Mandates: is_move_constructible_v<T> is true and is_convertible_v<U, T> is true.
+// template<class U> constexpr remove_cv_t<T> value_or(U&& v) &&;
+// Mandates: is_convertible_v<T, remove_cv_t<T>> is true and is_convertible_v<U, remove_cv_t<T>> is true.
 
 #include <expected>
 #include <utility>
@@ -38,7 +38,7 @@ void test() {
     const std::expected<NonCopyable, int> f1{5};
     // expected-note@+1 {{in instantiation of function template specialization 'std::expected<NonCopyable, int>::value_or<int>' requested here}}
     (void)f1.value_or(5);
-    // expected-error-re@*:* {{static assertion failed {{.*}}value_type has to be copy constructible}}
+    // expected-error-re@*:* {{static assertion failed {{.*}}value_type has to be implicitly convertible}}
   }
 
   // const & overload
@@ -56,7 +56,7 @@ void test() {
     std::expected<NonMovable, int> f1{5};
     // expected-note@+1 {{in instantiation of function template specialization 'std::expected<NonMovable, int>::value_or<int>' requested here}}
     (void)std::move(f1).value_or(5);
-    //expected-error-re@*:* {{static assertion failed {{.*}}value_type has to be move constructible}}
+    //expected-error-re@*:* {{static assertion failed {{.*}}value_type has to be implicitly convertible}}
   }
 
   // && overload
