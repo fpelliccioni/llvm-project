@@ -62,6 +62,20 @@ constexpr bool test() {
     assert(x == 10);
   }
 
+  // LWG3424: also check `volatile T` and `const volatile T`. Volatile reads
+  // are not allowed in constant expressions, so we verify the return type
+  // via decltype/declval without actually invoking value_or at runtime.
+  {
+    using E = std::expected<volatile int, int>;
+    static_assert(std::is_same_v<decltype(std::declval<const E&>().value_or(0)), int>);
+    static_assert(std::is_same_v<decltype(std::declval<E&&>().value_or(0)), int>);
+  }
+  {
+    using E = std::expected<const volatile int, int>;
+    static_assert(std::is_same_v<decltype(std::declval<const E&>().value_or(0)), int>);
+    static_assert(std::is_same_v<decltype(std::declval<E&&>().value_or(0)), int>);
+  }
+
   return true;
 }
 
