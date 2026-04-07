@@ -888,16 +888,20 @@ public:
   template <class _Up = remove_cv_t<_Tp>>
   [[nodiscard]] _LIBCPP_HIDE_FROM_ABI constexpr remove_cv_t<_Tp> value_or(_Up&& __v) const& {
     using _Ret = remove_cv_t<_Tp>;
-    static_assert(is_convertible_v<const _Tp&, _Ret>, "value_type has to be implicitly convertible to remove_cv_t<T>");
-    static_assert(is_convertible_v<_Up, _Ret>, "argument has to be convertible to value_type");
+    static_assert(is_convertible_v<const _Tp&, _Ret>,
+                  "expected::value_or: const T& must be implicitly convertible to remove_cv_t<T>");
+    static_assert(is_convertible_v<_Up, _Ret>,
+                  "expected::value_or: U must be implicitly convertible to remove_cv_t<T>");
     return this->__has_val() ? this->__val() : std::forward<_Up>(__v);
   }
 
   template <class _Up = remove_cv_t<_Tp>>
   [[nodiscard]] _LIBCPP_HIDE_FROM_ABI constexpr remove_cv_t<_Tp> value_or(_Up&& __v) && {
     using _Ret = remove_cv_t<_Tp>;
-    static_assert(is_convertible_v<_Tp, _Ret>, "value_type has to be implicitly convertible to remove_cv_t<T>");
-    static_assert(is_convertible_v<_Up, _Ret>, "argument has to be convertible to value_type");
+    static_assert(is_convertible_v<_Tp, _Ret>,
+                  "expected::value_or: T must be implicitly convertible to remove_cv_t<T>");
+    static_assert(is_convertible_v<_Up, _Ret>,
+                  "expected::value_or: U must be implicitly convertible to remove_cv_t<T>");
     return this->__has_val() ? std::move(this->__val()) : std::forward<_Up>(__v);
   }
 

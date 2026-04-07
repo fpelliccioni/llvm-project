@@ -38,7 +38,7 @@ void test() {
     const std::expected<NonCopyable, int> f1{5};
     // expected-note@+1 {{in instantiation of function template specialization 'std::expected<NonCopyable, int>::value_or<int>' requested here}}
     (void)f1.value_or(5);
-    // expected-error-re@*:* {{static assertion failed {{.*}}value_type has to be implicitly convertible}}
+    // expected-error-re@*:* {{static assertion failed {{.*}}must be implicitly convertible to remove_cv_t<T>}}
   }
 
   // const & overload
@@ -47,7 +47,7 @@ void test() {
     const std::expected<NotConvertibleFromInt, int> f1{std::in_place};
     // expected-note@+1 {{in instantiation of function template specialization 'std::expected<NotConvertibleFromInt, int>::value_or<int>' requested here}}
     (void)f1.value_or(5);
-    //expected-error-re@*:* {{static assertion failed {{.*}}argument has to be convertible to value_type}}
+    //expected-error-re@*:* {{static assertion failed {{.*}}U must be implicitly convertible to remove_cv_t<T>}}
   }
 
   // && overload
@@ -56,7 +56,7 @@ void test() {
     std::expected<NonMovable, int> f1{5};
     // expected-note@+1 {{in instantiation of function template specialization 'std::expected<NonMovable, int>::value_or<int>' requested here}}
     (void)std::move(f1).value_or(5);
-    //expected-error-re@*:* {{static assertion failed {{.*}}value_type has to be implicitly convertible}}
+    //expected-error-re@*:* {{static assertion failed {{.*}}must be implicitly convertible to remove_cv_t<T>}}
   }
 
   // && overload
@@ -65,6 +65,6 @@ void test() {
     std::expected<NotConvertibleFromInt, int> f1{std::in_place};
     // expected-note@+1 {{in instantiation of function template specialization 'std::expected<NotConvertibleFromInt, int>::value_or<int>' requested here}}
     (void)std::move(f1).value_or(5);
-    //expected-error-re@*:* {{static assertion failed {{.*}}argument has to be convertible to value_type}}
+    //expected-error-re@*:* {{static assertion failed {{.*}}U must be implicitly convertible to remove_cv_t<T>}}
   }
 }
